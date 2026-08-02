@@ -35,6 +35,21 @@ export default function App() {
       >
         Change Color
       </button>
+      <button
+        onClick={cicdok}
+        style={{
+          padding: '14px 24px',
+          border: 'none',
+          borderRadius: '999px',
+          fontSize: '16px',
+          fontWeight: 600,
+          cursor: 'pointer',
+          backgroundColor: '#ffffff',
+          color: '#111827',
+        }}
+      >
+        CI/CD is working !
+      </button>
     </div>
   );
 }
