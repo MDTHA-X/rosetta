@@ -9,6 +9,10 @@ export default function App() {
     setColorIndex((prev) => (prev + 1) % colors.length);
   };
 
+  const handleCicdMessage = () => {
+    alert('CI/CD is working!');
+  };
+
   return (
     <div
       style={{
@@ -16,6 +20,7 @@ export default function App() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
+        gap: '12px',
         backgroundColor: colors[colorIndex],
         transition: 'background-color 0.3s ease',
       }}
@@ -36,7 +41,7 @@ export default function App() {
         Change Color
       </button>
       <button
-        onClick={cicdok}
+        onClick={changeColor}
         style={{
           padding: '14px 24px',
           border: 'none',
@@ -48,7 +53,7 @@ export default function App() {
           color: '#111827',
         }}
       >
-        CI/CD is working !
+        CI/CD is working!
       </button>
     </div>
   );
