@@ -4,6 +4,11 @@ on:
   push:
     branches: [ "main" ]
 
+# Explicitly grant write access to packages and repository contents
+permissions:
+  contents: read
+  packages: write
+
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
