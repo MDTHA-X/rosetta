@@ -320,6 +320,16 @@ app.patch('/api/connections/:id', (req, res) => {
   res.status(200).json(conn);
 });
 
+app.delete('/api/connections/:id', (req, res) => {
+  const index = db.connections.findIndex(c => c.id === req.params.id);
+  if (index === -1) {
+    return res.status(404).json({ error: 'Connection not found' });
+  }
+  const deleted = db.connections.splice(index, 1)[0];
+  saveData(db);
+  res.status(200).json({ message: 'Connection removed successfully', deletedId: deleted.id });
+});
+
 // ==========================================
 // 5. CHANNELS ENDPOINTS
 // ==========================================
@@ -596,6 +606,16 @@ app.patch('/api/members/:id', (req, res) => {
 
   saveData(db);
   res.status(200).json(member);
+});
+
+app.delete('/api/members/:id', (req, res) => {
+  const index = db.members.findIndex(m => m.id === req.params.id);
+  if (index === -1) {
+    return res.status(404).json({ error: 'Member not found' });
+  }
+  const deleted = db.members.splice(index, 1)[0];
+  saveData(db);
+  res.status(200).json({ message: `Member "${deleted.name}" removed successfully`, deletedId: deleted.id });
 });
 
 // ==========================================
