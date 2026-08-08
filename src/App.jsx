@@ -69,16 +69,16 @@ export default function App() {
       const stData = await statsRes.json();
       const hlData = await healthRes.json();
 
-      setChannels(chData);
-      setMembers(memData);
-      setCards(cardData);
+      setChannels(Array.isArray(chData) ? chData : []);
+      setMembers(Array.isArray(memData) ? memData : []);
+      setCards(Array.isArray(cardData) ? cardData : []);
       setStats(stData);
       setHealth(hlData);
 
-      if (chData.length > 0) {
+      if (Array.isArray(chData) && chData.length > 0) {
         setActiveChannelId(chData[0].id);
       }
-      if (memData.length > 0) {
+      if (Array.isArray(memData) && memData.length > 0) {
         setSelectedSenderId(memData[0].id);
       }
     } catch (err) {
@@ -105,7 +105,7 @@ export default function App() {
     try {
       const res = await fetch(`${API_BASE}/messages?channelId=${channelId}`);
       const data = await res.json();
-      setMessages(data);
+      setMessages(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error('Error fetching messages:', err);
     }
@@ -222,7 +222,7 @@ export default function App() {
     }
   };
 
-  // Card (Kanban) Handlers
+  // Card Handlers
   const handleCreateCard = async (e) => {
     e.preventDefault();
     if (!newCardTitle.trim()) return;
@@ -286,6 +286,7 @@ export default function App() {
   };
 
   const activeChannel = channels.find(c => c.id === activeChannelId) || { name: 'general', description: '' };
+  const currentMember = members.find(m => m.id === selectedSenderId) || members[0] || { name: 'Tanjim Hossen', username: 'tanjim', role: 'Admin' };
 
   const filteredCards = cardFilterPriority === 'all' 
     ? cards 
@@ -293,62 +294,68 @@ export default function App() {
 
   const getPriorityBadge = (priority) => {
     switch (priority) {
-      case 'urgent': return { bg: '#ef444422', border: '#ef4444', text: '#f87171' };
-      case 'high': return { bg: '#f59e0b22', border: '#f59e0b', text: '#fbbf24' };
-      case 'medium': return { bg: '#3b82f622', border: '#3b82f6', text: '#60a5fa' };
-      default: return { bg: '#10b98122', border: '#10b981', text: '#34d399' };
+      case 'urgent': return { bg: 'rgba(242, 63, 67, 0.2)', border: '#f23f43', text: '#f23f43' };
+      case 'high': return { bg: 'rgba(240, 178, 50, 0.2)', border: '#f0b232', text: '#f0b232' };
+      case 'medium': return { bg: 'rgba(88, 101, 242, 0.2)', border: '#5865f2', text: '#5865f2' };
+      default: return { bg: 'rgba(35, 165, 90, 0.2)', border: '#23a55a', text: '#23a55a' };
     }
   };
 
   const getStatusDotColor = (status) => {
     switch (status) {
-      case 'online': return '#10b981';
-      case 'idle': return '#f59e0b';
-      case 'dnd': return '#ef4444';
-      default: return '#64748b';
+      case 'online': return '#23a55a';
+      case 'idle': return '#f0b232';
+      case 'dnd': return '#f23f43';
+      default: return '#80848e';
     }
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw', backgroundColor: '#313338', overflow: 'hidden' }}>
       
-      {/* TOP GLOBAL NAVBAR */}
+      {/* ============================================================ */}
+      {/* TOP APPLICATION BAR */}
+      {/* ============================================================ */}
       <header style={{
-        height: '60px',
-        backgroundColor: 'var(--bg-secondary)',
-        borderBottom: '1px solid var(--border-subtle)',
+        height: '56px',
+        backgroundColor: '#1e1f22',
+        borderBottom: '1px solid #1f2023',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        padding: '0 24px',
-        flexShrink: 0
+        padding: '0 20px',
+        flexShrink: 0,
+        zIndex: 10
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+          
+          {/* LOGO & BRAND */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <div style={{
               width: '36px',
               height: '36px',
-              borderRadius: '10px',
-              background: 'linear-gradient(135deg, #6366f1, #0284c7)',
+              borderRadius: '12px',
+              background: 'linear-gradient(135deg, #5865f2, #0284c7)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               fontWeight: 800,
               fontSize: '18px',
-              color: '#ffffff'
+              color: '#ffffff',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.3)'
             }}>R</div>
             <div>
-              <h1 style={{ fontSize: '18px', fontWeight: 700, letterSpacing: '-0.02em' }}>Rosetta</h1>
-              <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>Discord + Trello Hybrid Hub</span>
+              <div style={{ fontSize: '16px', fontWeight: 800, color: '#f2f3f5', letterSpacing: '-0.02em', lineHeight: 1.1 }}>Rosetta</div>
+              <div style={{ fontSize: '11px', color: '#949ba4', fontWeight: 500 }}>Discord & Trello Workspace</div>
             </div>
           </div>
 
-          {/* VIEW SWITCHER TABS */}
-          <nav style={{ display: 'flex', gap: '6px', marginLeft: '24px' }}>
+          {/* VIEW SWITCHER BUTTONS */}
+          <nav style={{ display: 'flex', gap: '8px', marginLeft: '16px' }}>
             <button
               onClick={() => setActiveTab('discord')}
               style={{
-                padding: '8px 16px',
+                padding: '6px 14px',
                 borderRadius: '8px',
                 border: 'none',
                 cursor: 'pointer',
@@ -357,9 +364,9 @@ export default function App() {
                 display: 'flex',
                 alignItems: 'center',
                 gap: '8px',
-                backgroundColor: activeTab === 'discord' ? 'var(--accent-discord)' : 'transparent',
-                color: activeTab === 'discord' ? '#ffffff' : 'var(--text-muted)',
-                transition: 'all 0.2s ease'
+                backgroundColor: activeTab === 'discord' ? '#5865f2' : 'transparent',
+                color: activeTab === 'discord' ? '#ffffff' : '#949ba4',
+                transition: 'all 0.15s ease'
               }}
             >
               💬 Discord Hub
@@ -367,7 +374,7 @@ export default function App() {
             <button
               onClick={() => setActiveTab('trello')}
               style={{
-                padding: '8px 16px',
+                padding: '6px 14px',
                 borderRadius: '8px',
                 border: 'none',
                 cursor: 'pointer',
@@ -376,9 +383,9 @@ export default function App() {
                 display: 'flex',
                 alignItems: 'center',
                 gap: '8px',
-                backgroundColor: activeTab === 'trello' ? 'var(--accent-trello)' : 'transparent',
-                color: activeTab === 'trello' ? '#ffffff' : 'var(--text-muted)',
-                transition: 'all 0.2s ease'
+                backgroundColor: activeTab === 'trello' ? '#0284c7' : 'transparent',
+                color: activeTab === 'trello' ? '#ffffff' : '#949ba4',
+                transition: 'all 0.15s ease'
               }}
             >
               📋 Trello Board
@@ -386,7 +393,7 @@ export default function App() {
             <button
               onClick={() => setActiveTab('stats')}
               style={{
-                padding: '8px 16px',
+                padding: '6px 14px',
                 borderRadius: '8px',
                 border: 'none',
                 cursor: 'pointer',
@@ -395,68 +402,70 @@ export default function App() {
                 display: 'flex',
                 alignItems: 'center',
                 gap: '8px',
-                backgroundColor: activeTab === 'stats' ? 'var(--bg-tertiary)' : 'transparent',
-                color: activeTab === 'stats' ? '#ffffff' : 'var(--text-muted)',
-                transition: 'all 0.2s ease'
+                backgroundColor: activeTab === 'stats' ? '#35373c' : 'transparent',
+                color: activeTab === 'stats' ? '#ffffff' : '#949ba4',
+                transition: 'all 0.15s ease'
               }}
             >
-              📊 System Diagnostics
+              📊 Diagnostics
             </button>
           </nav>
         </div>
 
-        {/* SERVER STATUS BADGE */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+        {/* SERVER STATUS INDICATOR */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div style={{
             display: 'flex',
             alignItems: 'center',
             gap: '8px',
-            padding: '6px 12px',
+            padding: '5px 12px',
             borderRadius: '20px',
-            backgroundColor: 'var(--bg-primary)',
-            border: '1px solid var(--border-subtle)',
+            backgroundColor: '#2b2d31',
+            border: '1px solid #1f2023',
             fontSize: '12px',
-            color: 'var(--text-muted)'
+            color: '#dbdee1'
           }}>
-            <span className="pulse-dot" style={{
+            <span className="status-pulse" style={{
               width: '8px',
               height: '8px',
               borderRadius: '50%',
-              backgroundColor: health?.status === 'ok' ? '#10b981' : '#ef4444'
+              backgroundColor: health?.status === 'ok' ? '#23a55a' : '#f23f43'
             }}></span>
-            <span>API Online</span>
-            <span style={{ color: 'var(--text-dim)' }}>|</span>
-            <span>Uptime: {health?.uptimeSeconds || 0}s</span>
+            <span style={{ fontWeight: 600 }}>API Online</span>
+            <span style={{ color: '#4e5058' }}>|</span>
+            <span style={{ color: '#949ba4' }}>Uptime: {health?.uptimeSeconds || 0}s</span>
           </div>
         </div>
       </header>
 
-      {/* MAIN CONTENT PANELS */}
+      {/* ============================================================ */}
+      {/* MAIN CONTAINER */}
+      {/* ============================================================ */}
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
 
         {/* ============================================================ */}
-        {/* VIEW 1: DISCORD HUB (Channels + Text Chat + Members Sidebar) */}
+        {/* VIEW 1: DISCORD HUB (Channels + Text Chat + Members Directory) */}
         {/* ============================================================ */}
         {activeTab === 'discord' && (
-          <div style={{ display: 'flex', width: '100%', height: '100%' }} className="animate-fade-in">
+          <div style={{ display: 'flex', width: '100%', height: '100%' }} className="fade-in">
             
             {/* LEFT SIDEBAR: CHANNELS */}
             <aside style={{
               width: '240px',
-              backgroundColor: 'var(--bg-secondary)',
-              borderRight: '1px solid var(--border-subtle)',
+              backgroundColor: '#2b2d31',
+              borderRight: '1px solid #1f2023',
               display: 'flex',
               flexDirection: 'column',
               flexShrink: 0
             }}>
               <div style={{
-                padding: '16px',
-                borderBottom: '1px solid var(--border-subtle)',
+                padding: '14px 16px',
+                borderBottom: '1px solid #1f2023',
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center'
               }}>
-                <span style={{ fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-dim)', letterSpacing: '0.05em' }}>
+                <span style={{ fontSize: '12px', fontWeight: 800, textTransform: 'uppercase', color: '#949ba4', letterSpacing: '0.04em' }}>
                   Text Channels
                 </span>
                 <button
@@ -465,72 +474,78 @@ export default function App() {
                   style={{
                     background: 'transparent',
                     border: 'none',
-                    color: 'var(--text-muted)',
+                    color: '#dbdee1',
                     cursor: 'pointer',
                     fontSize: '18px',
-                    fontWeight: 700
+                    fontWeight: 700,
+                    lineHeight: 1
                   }}
                 >+</button>
               </div>
 
+              {/* CHANNELS LIST */}
               <div style={{ flex: 1, overflowY: 'auto', padding: '8px' }}>
-                {channels.map(channel => (
-                  <div
-                    key={channel.id}
-                    onClick={() => setActiveChannelId(channel.id)}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: '8px 12px',
-                      borderRadius: '6px',
-                      cursor: 'pointer',
-                      marginBottom: '4px',
-                      backgroundColor: activeChannelId === channel.id ? 'var(--bg-tertiary)' : 'transparent',
-                      color: activeChannelId === channel.id ? '#ffffff' : 'var(--text-muted)',
-                      fontSize: '14px',
-                      fontWeight: activeChannelId === channel.id ? 600 : 400,
-                      transition: 'all 0.15s ease'
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden' }}>
-                      <span style={{ color: 'var(--text-dim)' }}>#</span>
-                      <span style={{ whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>{channel.name}</span>
+                {channels.map(channel => {
+                  const isActive = activeChannelId === channel.id;
+                  return (
+                    <div
+                      key={channel.id}
+                      onClick={() => setActiveChannelId(channel.id)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '8px 12px',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        marginBottom: '4px',
+                        backgroundColor: isActive ? '#35373c' : 'transparent',
+                        color: isActive ? '#ffffff' : '#949ba4',
+                        fontSize: '14px',
+                        fontWeight: isActive ? 600 : 500,
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden' }}>
+                        <span style={{ color: isActive ? '#dbdee1' : '#80848e', fontSize: '16px' }}>#</span>
+                        <span style={{ whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>{channel.name}</span>
+                      </div>
+                      {!channel.isDefault && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteChannel(channel.id, channel.isDefault);
+                          }}
+                          title="Delete channel"
+                          style={{
+                            background: 'transparent',
+                            border: 'none',
+                            color: '#80848e',
+                            cursor: 'pointer',
+                            fontSize: '12px',
+                            padding: '2px 4px'
+                          }}
+                        >✕</button>
+                      )}
                     </div>
-                    {!channel.isDefault && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeleteChannel(channel.id, channel.isDefault);
-                        }}
-                        style={{
-                          background: 'transparent',
-                          border: 'none',
-                          color: 'var(--text-dim)',
-                          cursor: 'pointer',
-                          fontSize: '12px',
-                          padding: '2px 4px'
-                        }}
-                      >✕</button>
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
-              {/* CURRENT USER FOOTER */}
+              {/* LOGGED IN MEMBER FOOTER */}
               <div style={{
-                padding: '12px 16px',
-                borderTop: '1px solid var(--border-subtle)',
-                backgroundColor: 'var(--bg-primary)',
+                padding: '12px 14px',
+                borderTop: '1px solid #1f2023',
+                backgroundColor: '#232428',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '10px'
               }}>
                 <div style={{ position: 'relative' }}>
                   <img
-                    src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80"
-                    alt="User Avatar"
-                    style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover' }}
+                    src={currentMember.avatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80"}
+                    alt="Current user"
+                    style={{ width: '34px', height: '34px', borderRadius: '50%', objectFit: 'cover' }}
                   />
                   <span style={{
                     position: 'absolute',
@@ -539,46 +554,58 @@ export default function App() {
                     width: '10px',
                     height: '10px',
                     borderRadius: '50%',
-                    backgroundColor: '#10b981',
-                    border: '2px solid var(--bg-primary)'
+                    backgroundColor: getStatusDotColor(currentMember.status),
+                    border: '2px solid #232428'
                   }}></span>
                 </div>
                 <div style={{ overflow: 'hidden' }}>
-                  <div style={{ fontSize: '13px', fontWeight: 600 }}>Tanjim Hossen</div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-dim)' }}>@tanjim (Admin)</div>
+                  <div style={{ fontSize: '13px', fontWeight: 700, color: '#f2f3f5', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>{currentMember.name}</div>
+                  <div style={{ fontSize: '11px', color: '#949ba4' }}>@{currentMember.username} ({currentMember.role})</div>
                 </div>
               </div>
             </aside>
 
-            {/* MIDDLE: CHAT STREAM */}
-            <main style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-primary)' }}>
+            {/* MIDDLE PANE: CHAT STREAM */}
+            <main style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: '#313338' }}>
               
-              {/* CHANNEL HEADER */}
+              {/* CHANNEL TOP HEADER */}
               <div style={{
                 height: '52px',
-                borderBottom: '1px solid var(--border-subtle)',
+                borderBottom: '1px solid #1f2023',
                 display: 'flex',
                 alignItems: 'center',
                 padding: '0 20px',
                 gap: '12px',
                 flexShrink: 0
               }}>
-                <span style={{ fontSize: '20px', color: 'var(--text-dim)', fontWeight: 700 }}>#</span>
-                <span style={{ fontSize: '15px', fontWeight: 700 }}>{activeChannel.name}</span>
-                <span style={{ color: 'var(--border-subtle)' }}>|</span>
-                <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>{activeChannel.description || 'Welcome to this channel!'}</span>
+                <span style={{ fontSize: '22px', color: '#80848e', fontWeight: 700 }}>#</span>
+                <span style={{ fontSize: '16px', fontWeight: 700, color: '#f2f3f5' }}>{activeChannel.name}</span>
+                <span style={{ color: '#3f4147' }}>|</span>
+                <span style={{ fontSize: '13px', color: '#949ba4' }}>{activeChannel.description || 'Welcome to this channel!'}</span>
               </div>
 
               {/* MESSAGES LIST */}
-              <div style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column', gap: '18px' }}>
                 {messages.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-dim)' }}>
-                    <p style={{ fontSize: '16px', fontWeight: 600, marginBottom: '6px' }}>Welcome to #{activeChannel.name}!</p>
-                    <p style={{ fontSize: '13px' }}>This is the start of the #{activeChannel.name} channel. Be the first to send a message.</p>
+                  <div style={{ textAlign: 'center', padding: '60px 0', color: '#949ba4' }}>
+                    <div style={{
+                      width: '60px',
+                      height: '60px',
+                      borderRadius: '50%',
+                      backgroundColor: '#383a40',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '32px',
+                      margin: '0 auto 16px auto',
+                      color: '#dbdee1'
+                    }}>#</div>
+                    <h3 style={{ fontSize: '20px', fontWeight: 800, color: '#f2f3f5', marginBottom: '6px' }}>Welcome to #{activeChannel.name}!</h3>
+                    <p style={{ fontSize: '14px', maxWidth: '400px', margin: '0 auto' }}>This is the beginning of the #{activeChannel.name} channel. Send a message below to start the conversation!</p>
                   </div>
                 ) : (
                   messages.map(msg => (
-                    <div key={msg.id} style={{ display: 'flex', gap: '14px', alignItems: 'flex-start', group: 'msg' }}>
+                    <div key={msg.id} style={{ display: 'flex', gap: '14px', alignItems: 'flex-start' }}>
                       <img
                         src={msg.senderAvatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${msg.senderName}`}
                         alt={msg.senderName}
@@ -586,12 +613,12 @@ export default function App() {
                       />
                       <div style={{ flex: 1 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                          <span style={{ fontSize: '14px', fontWeight: 600, color: '#ffffff' }}>{msg.senderName}</span>
-                          <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
+                          <span style={{ fontSize: '14px', fontWeight: 700, color: '#f2f3f5' }}>{msg.senderName}</span>
+                          <span style={{ fontSize: '11px', color: '#949ba4' }}>
                             {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                           </span>
                         </div>
-                        <p style={{ fontSize: '14px', color: '#e2e8f0', lineHeight: 1.5, wordBreak: 'break-word' }}>{msg.text}</p>
+                        <p style={{ fontSize: '14px', color: '#dbdee1', lineHeight: 1.5, wordBreak: 'break-word' }}>{msg.text}</p>
                       </div>
                       <button
                         onClick={() => handleDeleteMessage(msg.id)}
@@ -599,10 +626,10 @@ export default function App() {
                         style={{
                           background: 'transparent',
                           border: 'none',
-                          color: 'var(--text-dim)',
+                          color: '#80848e',
                           cursor: 'pointer',
-                          fontSize: '12px',
-                          opacity: 0.6
+                          fontSize: '13px',
+                          padding: '4px'
                         }}
                       >✕</button>
                     </div>
@@ -611,15 +638,14 @@ export default function App() {
                 <div ref={messagesEndRef} />
               </div>
 
-              {/* MESSAGE COMPOSER INPUT */}
+              {/* MESSAGE COMPOSER BAR */}
               <div style={{ padding: '0 20px 20px 20px', flexShrink: 0 }}>
                 <form onSubmit={handleSendMessage} style={{
                   display: 'flex',
                   alignItems: 'center',
-                  backgroundColor: 'var(--bg-secondary)',
+                  backgroundColor: '#383a40',
                   borderRadius: '8px',
-                  border: '1px solid var(--border-subtle)',
-                  padding: '6px 12px',
+                  padding: '6px 14px',
                   gap: '12px'
                 }}>
                   {/* SENDER PICKER */}
@@ -627,13 +653,15 @@ export default function App() {
                     value={selectedSenderId}
                     onChange={(e) => setSelectedSenderId(e.target.value)}
                     style={{
-                      backgroundColor: 'var(--bg-tertiary)',
-                      color: 'var(--text-main)',
-                      border: 'none',
-                      padding: '6px 10px',
+                      backgroundColor: '#2b2d31',
+                      color: '#f2f3f5',
+                      border: '1px solid #1f2023',
+                      padding: '8px 12px',
                       borderRadius: '6px',
-                      fontSize: '12px',
-                      cursor: 'pointer'
+                      fontSize: '13px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      outline: 'none'
                     }}
                   >
                     {members.map(m => (
@@ -650,7 +678,7 @@ export default function App() {
                       flex: 1,
                       background: 'transparent',
                       border: 'none',
-                      color: '#ffffff',
+                      color: '#f2f3f5',
                       fontSize: '14px',
                       outline: 'none',
                       padding: '8px 0'
@@ -660,14 +688,15 @@ export default function App() {
                   <button
                     type="submit"
                     style={{
-                      padding: '8px 16px',
-                      backgroundColor: 'var(--accent-discord)',
+                      padding: '8px 18px',
+                      backgroundColor: '#5865f2',
                       color: '#ffffff',
                       border: 'none',
                       borderRadius: '6px',
                       fontSize: '13px',
-                      fontWeight: 600,
-                      cursor: 'pointer'
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      transition: 'background-color 0.15s ease'
                     }}
                   >Send</button>
                 </form>
@@ -677,25 +706,26 @@ export default function App() {
             {/* RIGHT SIDEBAR: MEMBER DIRECTORY */}
             <aside style={{
               width: '240px',
-              backgroundColor: 'var(--bg-secondary)',
-              borderLeft: '1px solid var(--border-subtle)',
+              backgroundColor: '#2b2d31',
+              borderLeft: '1px solid #1f2023',
               padding: '16px',
               display: 'flex',
               flexDirection: 'column',
               flexShrink: 0
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                <span style={{ fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-dim)', letterSpacing: '0.05em' }}>
+                <span style={{ fontSize: '12px', fontWeight: 800, textTransform: 'uppercase', color: '#949ba4', letterSpacing: '0.04em' }}>
                   Members ({members.length})
                 </span>
                 <button
                   onClick={() => setShowMemberModal(true)}
+                  title="Add Member"
                   style={{
                     background: 'transparent',
                     border: 'none',
-                    color: 'var(--text-muted)',
+                    color: '#dbdee1',
                     cursor: 'pointer',
-                    fontSize: '16px',
+                    fontSize: '18px',
                     fontWeight: 700
                   }}
                 >+</button>
@@ -718,12 +748,12 @@ export default function App() {
                         height: '10px',
                         borderRadius: '50%',
                         backgroundColor: getStatusDotColor(member.status),
-                        border: '2px solid var(--bg-secondary)'
+                        border: '2px solid #2b2d31'
                       }}></span>
                     </div>
                     <div style={{ overflow: 'hidden' }}>
-                      <div style={{ fontSize: '13px', fontWeight: 600, color: '#ffffff' }}>{member.name}</div>
-                      <div style={{ fontSize: '11px', color: 'var(--text-dim)', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
+                      <div style={{ fontSize: '13px', fontWeight: 700, color: '#f2f3f5' }}>{member.name}</div>
+                      <div style={{ fontSize: '11px', color: '#949ba4', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
                         {member.role} {member.customStatus ? `• ${member.customStatus}` : ''}
                       </div>
                     </div>
@@ -735,15 +765,15 @@ export default function App() {
         )}
 
         {/* ============================================================ */}
-        {/* VIEW 2: TRELLO KANBAN BOARD (Sprint Columns & Movable Cards) */}
+        {/* VIEW 2: TRELLO KANBAN BOARD */}
         {/* ============================================================ */}
         {activeTab === 'trello' && (
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-primary)', overflow: 'hidden' }} className="animate-fade-in">
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: '#0f172a', overflow: 'hidden' }} className="fade-in">
             
             {/* KANBAN CONTROLS BAR */}
             <div style={{
               height: '56px',
-              borderBottom: '1px solid var(--border-subtle)',
+              borderBottom: '1px solid #1e293b',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
@@ -751,29 +781,31 @@ export default function App() {
               flexShrink: 0
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                <span style={{ fontSize: '16px', fontWeight: 700 }}>Sprint Kanban Board</span>
-                <span style={{ color: 'var(--border-subtle)' }}>|</span>
+                <span style={{ fontSize: '16px', fontWeight: 800, color: '#f8fafc' }}>Sprint Kanban Board</span>
+                <span style={{ color: '#334155' }}>|</span>
                 
                 {/* FILTER BY PRIORITY */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: 'var(--text-muted)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#94a3b8' }}>
                   <span>Filter:</span>
                   <select
                     value={cardFilterPriority}
                     onChange={(e) => setCardFilterPriority(e.target.value)}
                     style={{
-                      backgroundColor: 'var(--bg-secondary)',
-                      color: 'var(--text-main)',
-                      border: '1px solid var(--border-subtle)',
-                      padding: '4px 8px',
+                      backgroundColor: '#1e293b',
+                      color: '#f8fafc',
+                      border: '1px solid #334155',
+                      padding: '5px 10px',
                       borderRadius: '6px',
-                      fontSize: '12px'
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      outline: 'none'
                     }}
                   >
                     <option value="all">All Priorities</option>
-                    <option value="urgent">Urgent</option>
-                    <option value="high">High</option>
-                    <option value="medium">Medium</option>
-                    <option value="low">Low</option>
+                    <option value="urgent">🔴 Urgent</option>
+                    <option value="high">🟡 High</option>
+                    <option value="medium">🔵 Medium</option>
+                    <option value="low">🟢 Low</option>
                   </select>
                 </div>
               </div>
@@ -781,13 +813,13 @@ export default function App() {
               <button
                 onClick={() => setShowCardModal(true)}
                 style={{
-                  padding: '8px 16px',
-                  backgroundColor: 'var(--accent-trello)',
+                  padding: '8px 18px',
+                  backgroundColor: '#0284c7',
                   color: '#ffffff',
                   border: 'none',
                   borderRadius: '6px',
                   fontSize: '13px',
-                  fontWeight: 600,
+                  fontWeight: 700,
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
@@ -798,12 +830,12 @@ export default function App() {
               </button>
             </div>
 
-            {/* KANBAN 4-COLUMN BOARD */}
+            {/* 4-COLUMN KANBAN BOARD */}
             <div style={{
               flex: 1,
               display: 'grid',
               gridTemplateColumns: 'repeat(4, 1fr)',
-              gap: '16px',
+              gap: '18px',
               padding: '24px',
               overflowX: 'auto'
             }}>
@@ -816,9 +848,9 @@ export default function App() {
                 const colCards = filteredCards.filter(c => c.list === col.id);
                 return (
                   <div key={col.id} style={{
-                    backgroundColor: 'var(--bg-secondary)',
-                    borderRadius: '10px',
-                    border: '1px solid var(--border-subtle)',
+                    backgroundColor: '#1e293b',
+                    borderRadius: '12px',
+                    border: '1px solid #334155',
                     display: 'flex',
                     flexDirection: 'column',
                     maxHeight: '100%',
@@ -826,51 +858,54 @@ export default function App() {
                   }}>
                     {/* COLUMN HEADER */}
                     <div style={{
-                      padding: '14px 16px',
-                      borderBottom: '1px solid var(--border-subtle)',
+                      padding: '14px 18px',
+                      borderBottom: '1px solid #334155',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'space-between',
-                      fontWeight: 700,
-                      fontSize: '14px'
+                      fontWeight: 800,
+                      fontSize: '14px',
+                      color: '#f8fafc'
                     }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <span>{col.title}</span>
                         <span style={{
                           fontSize: '11px',
-                          padding: '2px 6px',
-                          borderRadius: '10px',
-                          backgroundColor: 'var(--bg-tertiary)',
-                          color: 'var(--text-muted)'
+                          padding: '2px 8px',
+                          borderRadius: '12px',
+                          backgroundColor: '#334155',
+                          color: '#94a3b8'
                         }}>{colCards.length}</span>
                       </div>
                     </div>
 
                     {/* CARDS LIST */}
-                    <div style={{ flex: 1, overflowY: 'auto', padding: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    <div style={{ flex: 1, overflowY: 'auto', padding: '12px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
                       {colCards.map(card => {
                         const pBadge = getPriorityBadge(card.priority);
                         return (
                           <div key={card.id} style={{
-                            backgroundColor: 'var(--bg-primary)',
-                            border: '1px solid var(--border-subtle)',
-                            borderRadius: '8px',
+                            backgroundColor: '#0f172a',
+                            border: '1px solid #334155',
+                            borderRadius: '10px',
                             padding: '14px',
                             display: 'flex',
                             flexDirection: 'column',
-                            gap: '10px'
+                            gap: '10px',
+                            boxShadow: '0 2px 6px rgba(0,0,0,0.2)'
                           }}>
-                            {/* TOP ROW: PRIORITY BADGE & DELETE */}
+                            {/* TOP: PRIORITY BADGE & DELETE */}
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                               <span style={{
-                                fontSize: '11px',
+                                fontSize: '10px',
                                 textTransform: 'uppercase',
-                                fontWeight: 700,
-                                padding: '2px 8px',
+                                fontWeight: 800,
+                                padding: '3px 8px',
                                 borderRadius: '4px',
                                 backgroundColor: pBadge.bg,
                                 border: `1px solid ${pBadge.border}`,
-                                color: pBadge.text
+                                color: pBadge.text,
+                                letterSpacing: '0.04em'
                               }}>{card.priority}</span>
 
                               <button
@@ -878,7 +913,7 @@ export default function App() {
                                 style={{
                                   background: 'transparent',
                                   border: 'none',
-                                  color: 'var(--text-dim)',
+                                  color: '#64748b',
                                   cursor: 'pointer',
                                   fontSize: '12px'
                                 }}
@@ -887,37 +922,38 @@ export default function App() {
 
                             {/* CARD CONTENT */}
                             <div>
-                              <h4 style={{ fontSize: '14px', fontWeight: 600, color: '#ffffff', marginBottom: '4px' }}>{card.title}</h4>
+                              <h4 style={{ fontSize: '14px', fontWeight: 700, color: '#f8fafc', marginBottom: '4px', lineHeight: 1.3 }}>{card.title}</h4>
                               {card.description && (
-                                <p style={{ fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.4 }}>{card.description}</p>
+                                <p style={{ fontSize: '12px', color: '#94a3b8', lineHeight: 1.4 }}>{card.description}</p>
                               )}
                             </div>
 
-                            {/* ASSIGNEE & MOVE ACTIONS */}
+                            {/* ASSIGNEE & QUICK MOVE ACTIONS */}
                             <div style={{
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'space-between',
                               paddingTop: '8px',
-                              borderTop: '1px solid var(--border-subtle)',
+                              borderTop: '1px solid #1e293b',
                               fontSize: '12px'
                             }}>
-                              <span style={{ color: 'var(--text-dim)' }}>👤 {card.assigneeName || 'Unassigned'}</span>
+                              <span style={{ color: '#64748b', fontWeight: 600 }}>👤 {card.assigneeName || 'Unassigned'}</span>
 
-                              {/* QUICK COLUMN SHIFT BUTTONS */}
+                              {/* MOVE BUTTONS */}
                               <div style={{ display: 'flex', gap: '4px' }}>
                                 {col.id !== 'todo' && (
                                   <button
                                     onClick={() => handleMoveCard(card.id, card.list, 'left')}
                                     title="Move Left"
                                     style={{
-                                      padding: '2px 6px',
-                                      backgroundColor: 'var(--bg-tertiary)',
-                                      color: 'var(--text-main)',
+                                      padding: '3px 8px',
+                                      backgroundColor: '#334155',
+                                      color: '#f8fafc',
                                       border: 'none',
                                       borderRadius: '4px',
                                       cursor: 'pointer',
-                                      fontSize: '11px'
+                                      fontSize: '11px',
+                                      fontWeight: 700
                                     }}
                                   >◀</button>
                                 )}
@@ -926,13 +962,14 @@ export default function App() {
                                     onClick={() => handleMoveCard(card.id, card.list, 'right')}
                                     title="Move Right"
                                     style={{
-                                      padding: '2px 6px',
-                                      backgroundColor: 'var(--bg-tertiary)',
-                                      color: 'var(--text-main)',
+                                      padding: '3px 8px',
+                                      backgroundColor: '#334155',
+                                      color: '#f8fafc',
                                       border: 'none',
                                       borderRadius: '4px',
                                       cursor: 'pointer',
-                                      fontSize: '11px'
+                                      fontSize: '11px',
+                                      fontWeight: 700
                                     }}
                                   >▶</button>
                                 )}
@@ -950,45 +987,45 @@ export default function App() {
         )}
 
         {/* ============================================================ */}
-        {/* VIEW 3: SYSTEM STATS & API DIAGNOSTICS */}
+        {/* VIEW 3: SYSTEM DIAGNOSTICS */}
         {/* ============================================================ */}
         {activeTab === 'stats' && (
-          <div style={{ flex: 1, backgroundColor: 'var(--bg-primary)', padding: '32px', overflowY: 'auto' }} className="animate-fade-in">
+          <div style={{ flex: 1, backgroundColor: '#0f172a', padding: '32px', overflowY: 'auto' }} className="fade-in">
             <div style={{ maxWidth: '900px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '24px' }}>
               
               <div>
-                <h2 style={{ fontSize: '22px', fontWeight: 800, marginBottom: '6px' }}>System Diagnostics & API Metrics</h2>
-                <p style={{ fontSize: '14px', color: 'var(--text-muted)' }}>Live operational overview of the Rosetta platform and testing framework.</p>
+                <h2 style={{ fontSize: '24px', fontWeight: 800, color: '#f8fafc', marginBottom: '6px' }}>System Diagnostics & Platform Metrics</h2>
+                <p style={{ fontSize: '14px', color: '#94a3b8' }}>Real-time telemetry and resource breakdown for Rosetta.</p>
               </div>
 
-              {/* STAT METRICS GRID */}
+              {/* STATS METRIC GRID */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
-                <div style={{ backgroundColor: 'var(--bg-secondary)', padding: '20px', borderRadius: '10px', border: '1px solid var(--border-subtle)' }}>
-                  <div style={{ fontSize: '12px', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700 }}>Total Channels</div>
-                  <div style={{ fontSize: '28px', fontWeight: 800, color: 'var(--accent-discord)', marginTop: '8px' }}>{stats?.totalChannels || 0}</div>
+                <div style={{ backgroundColor: '#1e293b', padding: '20px', borderRadius: '12px', border: '1px solid #334155' }}>
+                  <div style={{ fontSize: '12px', color: '#64748b', textTransform: 'uppercase', fontWeight: 800 }}>Total Channels</div>
+                  <div style={{ fontSize: '28px', fontWeight: 800, color: '#5865f2', marginTop: '8px' }}>{stats?.totalChannels || 0}</div>
                 </div>
-                <div style={{ backgroundColor: 'var(--bg-secondary)', padding: '20px', borderRadius: '10px', border: '1px solid var(--border-subtle)' }}>
-                  <div style={{ fontSize: '12px', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700 }}>Active Members</div>
+                <div style={{ backgroundColor: '#1e293b', padding: '20px', borderRadius: '12px', border: '1px solid #334155' }}>
+                  <div style={{ fontSize: '12px', color: '#64748b', textTransform: 'uppercase', fontWeight: 800 }}>Active Members</div>
                   <div style={{ fontSize: '28px', fontWeight: 800, color: '#10b981', marginTop: '8px' }}>{stats?.totalMembers || 0}</div>
                 </div>
-                <div style={{ backgroundColor: 'var(--bg-secondary)', padding: '20px', borderRadius: '10px', border: '1px solid var(--border-subtle)' }}>
-                  <div style={{ fontSize: '12px', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700 }}>Total Messages</div>
+                <div style={{ backgroundColor: '#1e293b', padding: '20px', borderRadius: '12px', border: '1px solid #334155' }}>
+                  <div style={{ fontSize: '12px', color: '#64748b', textTransform: 'uppercase', fontWeight: 800 }}>Total Messages</div>
                   <div style={{ fontSize: '28px', fontWeight: 800, color: '#f59e0b', marginTop: '8px' }}>{stats?.totalMessages || 0}</div>
                 </div>
-                <div style={{ backgroundColor: 'var(--bg-secondary)', padding: '20px', borderRadius: '10px', border: '1px solid var(--border-subtle)' }}>
-                  <div style={{ fontSize: '12px', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700 }}>Kanban Cards</div>
-                  <div style={{ fontSize: '28px', fontWeight: 800, color: 'var(--accent-trello)', marginTop: '8px' }}>{stats?.totalCards || 0}</div>
+                <div style={{ backgroundColor: '#1e293b', padding: '20px', borderRadius: '12px', border: '1px solid #334155' }}>
+                  <div style={{ fontSize: '12px', color: '#64748b', textTransform: 'uppercase', fontWeight: 800 }}>Kanban Cards</div>
+                  <div style={{ fontSize: '28px', fontWeight: 800, color: '#0284c7', marginTop: '8px' }}>{stats?.totalCards || 0}</div>
                 </div>
               </div>
 
-              {/* AUTOMATION & QUALITY ASSURANCE SPECS */}
-              <div style={{ backgroundColor: 'var(--bg-secondary)', padding: '24px', borderRadius: '10px', border: '1px solid var(--border-subtle)' }}>
-                <h3 style={{ fontSize: '16px', fontWeight: 700, marginBottom: '12px' }}>🧪 Quality Assurance & Test Architecture</h3>
-                <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '14px', color: 'var(--text-muted)' }}>
-                  <li>✅ <strong>Postman Test Assertions:</strong> 100 Automated assertions (covering Channels, Members, Messages, and Cards).</li>
-                  <li>✅ <strong>Newman CLI Runner:</strong> Headless execution with rich HTML reporting artifact generation.</li>
-                  <li>✅ <strong>CI/CD Workflow:</strong> Automated GitHub Actions workflow on code push to main.</li>
-                  <li>✅ <strong>Apache JMeter Performance Test:</strong> Multi-threaded concurrency load testing against Azure VPS.</li>
+              {/* ARCHITECTURE SUMMARY */}
+              <div style={{ backgroundColor: '#1e293b', padding: '24px', borderRadius: '12px', border: '1px solid #334155' }}>
+                <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#f8fafc', marginBottom: '12px' }}>⚙️ Infrastructure & Specifications</h3>
+                <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '14px', color: '#94a3b8' }}>
+                  <li>🚀 <strong>Hosting Node:</strong> Azure Cloud VPS (`40.83.100.54`)</li>
+                  <li>📦 <strong>Container Registry:</strong> GitHub Packages (`ghcr.io/mdtha-x/rosetta`)</li>
+                  <li>⚡ <strong>Response Time:</strong> Sub-3ms on primary read/write endpoints</li>
+                  <li>🛡️ <strong>Quality Gates:</strong> 100 Postman automated test assertions ready for regression audits</li>
                 </ul>
               </div>
 
@@ -1005,35 +1042,35 @@ export default function App() {
       {/* CREATE CHANNEL MODAL */}
       {showChannelModal && (
         <div style={{
-          position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.7)',
+          position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)',
           display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100
         }}>
-          <div style={{ backgroundColor: 'var(--bg-secondary)', borderRadius: '12px', width: '420px', padding: '24px', border: '1px solid var(--border-subtle)' }}>
-            <h3 style={{ fontSize: '18px', fontWeight: 700, marginBottom: '16px' }}>Create Text Channel</h3>
+          <div style={{ backgroundColor: '#2b2d31', borderRadius: '12px', width: '420px', padding: '24px', border: '1px solid #1f2023', boxShadow: '0 8px 32px rgba(0,0,0,0.5)' }}>
+            <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#f2f3f5', marginBottom: '16px' }}>Create Text Channel</h3>
             <form onSubmit={handleCreateChannel} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div>
-                <label style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>CHANNEL NAME</label>
+                <label style={{ fontSize: '12px', fontWeight: 700, color: '#949ba4', display: 'block', marginBottom: '6px' }}>CHANNEL NAME</label>
                 <input
                   type="text"
                   placeholder="e.g. backend-sprint"
                   value={newChannelName}
                   onChange={(e) => setNewChannelName(e.target.value)}
-                  style={{ width: '100%', padding: '10px', borderRadius: '6px', backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-subtle)', color: '#ffffff' }}
+                  style={{ width: '100%', padding: '10px', borderRadius: '6px', backgroundColor: '#1e1f22', border: '1px solid #1f2023', color: '#f2f3f5', outline: 'none' }}
                 />
               </div>
               <div>
-                <label style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>DESCRIPTION (OPTIONAL)</label>
+                <label style={{ fontSize: '12px', fontWeight: 700, color: '#949ba4', display: 'block', marginBottom: '6px' }}>DESCRIPTION (OPTIONAL)</label>
                 <input
                   type="text"
                   placeholder="What is this channel for?"
                   value={newChannelDesc}
                   onChange={(e) => setNewChannelDesc(e.target.value)}
-                  style={{ width: '100%', padding: '10px', borderRadius: '6px', backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-subtle)', color: '#ffffff' }}
+                  style={{ width: '100%', padding: '10px', borderRadius: '6px', backgroundColor: '#1e1f22', border: '1px solid #1f2023', color: '#f2f3f5', outline: 'none' }}
                 />
               </div>
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
-                <button type="button" onClick={() => setShowChannelModal(false)} style={{ padding: '8px 16px', background: 'transparent', color: 'var(--text-muted)', border: 'none', cursor: 'pointer' }}>Cancel</button>
-                <button type="submit" style={{ padding: '8px 18px', backgroundColor: 'var(--accent-discord)', color: '#ffffff', border: 'none', borderRadius: '6px', fontWeight: 600, cursor: 'pointer' }}>Create Channel</button>
+                <button type="button" onClick={() => setShowChannelModal(false)} style={{ padding: '8px 16px', background: 'transparent', color: '#949ba4', border: 'none', cursor: 'pointer', fontWeight: 600 }}>Cancel</button>
+                <button type="submit" style={{ padding: '8px 18px', backgroundColor: '#5865f2', color: '#ffffff', border: 'none', borderRadius: '6px', fontWeight: 700, cursor: 'pointer' }}>Create Channel</button>
               </div>
             </form>
           </div>
@@ -1043,38 +1080,38 @@ export default function App() {
       {/* CREATE MEMBER MODAL */}
       {showMemberModal && (
         <div style={{
-          position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.7)',
+          position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)',
           display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100
         }}>
-          <div style={{ backgroundColor: 'var(--bg-secondary)', borderRadius: '12px', width: '420px', padding: '24px', border: '1px solid var(--border-subtle)' }}>
-            <h3 style={{ fontSize: '18px', fontWeight: 700, marginBottom: '16px' }}>Add Team Member</h3>
+          <div style={{ backgroundColor: '#2b2d31', borderRadius: '12px', width: '420px', padding: '24px', border: '1px solid #1f2023', boxShadow: '0 8px 32px rgba(0,0,0,0.5)' }}>
+            <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#f2f3f5', marginBottom: '16px' }}>Add Team Member</h3>
             <form onSubmit={handleCreateMember} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div>
-                <label style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>FULL NAME</label>
+                <label style={{ fontSize: '12px', fontWeight: 700, color: '#949ba4', display: 'block', marginBottom: '6px' }}>FULL NAME</label>
                 <input
                   type="text"
-                  placeholder="e.g. John Doe"
+                  placeholder="e.g. David Kim"
                   value={newMemberName}
                   onChange={(e) => setNewMemberName(e.target.value)}
-                  style={{ width: '100%', padding: '10px', borderRadius: '6px', backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-subtle)', color: '#ffffff' }}
+                  style={{ width: '100%', padding: '10px', borderRadius: '6px', backgroundColor: '#1e1f22', border: '1px solid #1f2023', color: '#f2f3f5', outline: 'none' }}
                 />
               </div>
               <div>
-                <label style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>USERNAME</label>
+                <label style={{ fontSize: '12px', fontWeight: 700, color: '#949ba4', display: 'block', marginBottom: '6px' }}>USERNAME</label>
                 <input
                   type="text"
-                  placeholder="e.g. jdoe"
+                  placeholder="e.g. davidk"
                   value={newMemberUsername}
                   onChange={(e) => setNewMemberUsername(e.target.value)}
-                  style={{ width: '100%', padding: '10px', borderRadius: '6px', backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-subtle)', color: '#ffffff' }}
+                  style={{ width: '100%', padding: '10px', borderRadius: '6px', backgroundColor: '#1e1f22', border: '1px solid #1f2023', color: '#f2f3f5', outline: 'none' }}
                 />
               </div>
               <div>
-                <label style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>ROLE</label>
+                <label style={{ fontSize: '12px', fontWeight: 700, color: '#949ba4', display: 'block', marginBottom: '6px' }}>ROLE</label>
                 <select
                   value={newMemberRole}
                   onChange={(e) => setNewMemberRole(e.target.value)}
-                  style={{ width: '100%', padding: '10px', borderRadius: '6px', backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-subtle)', color: '#ffffff' }}
+                  style={{ width: '100%', padding: '10px', borderRadius: '6px', backgroundColor: '#1e1f22', border: '1px solid #1f2023', color: '#f2f3f5', outline: 'none' }}
                 >
                   <option value="Admin">Admin</option>
                   <option value="Lead Developer">Lead Developer</option>
@@ -1084,50 +1121,50 @@ export default function App() {
                 </select>
               </div>
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
-                <button type="button" onClick={() => setShowMemberModal(false)} style={{ padding: '8px 16px', background: 'transparent', color: 'var(--text-muted)', border: 'none', cursor: 'pointer' }}>Cancel</button>
-                <button type="submit" style={{ padding: '8px 18px', backgroundColor: '#10b981', color: '#ffffff', border: 'none', borderRadius: '6px', fontWeight: 600, cursor: 'pointer' }}>Add Member</button>
+                <button type="button" onClick={() => setShowMemberModal(false)} style={{ padding: '8px 16px', background: 'transparent', color: '#949ba4', border: 'none', cursor: 'pointer', fontWeight: 600 }}>Cancel</button>
+                <button type="submit" style={{ padding: '8px 18px', backgroundColor: '#23a55a', color: '#ffffff', border: 'none', borderRadius: '6px', fontWeight: 700, cursor: 'pointer' }}>Add Member</button>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* CREATE CARD MODAL */}
+      {/* CREATE KANBAN CARD MODAL */}
       {showCardModal && (
         <div style={{
-          position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.7)',
+          position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)',
           display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100
         }}>
-          <div style={{ backgroundColor: 'var(--bg-secondary)', borderRadius: '12px', width: '460px', padding: '24px', border: '1px solid var(--border-subtle)' }}>
-            <h3 style={{ fontSize: '18px', fontWeight: 700, marginBottom: '16px' }}>Create Kanban Task Card</h3>
+          <div style={{ backgroundColor: '#1e293b', borderRadius: '12px', width: '460px', padding: '24px', border: '1px solid #334155', boxShadow: '0 8px 32px rgba(0,0,0,0.5)' }}>
+            <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#f8fafc', marginBottom: '16px' }}>Create Kanban Task Card</h3>
             <form onSubmit={handleCreateCard} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div>
-                <label style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>CARD TITLE</label>
+                <label style={{ fontSize: '12px', fontWeight: 700, color: '#94a3b8', display: 'block', marginBottom: '6px' }}>CARD TITLE</label>
                 <input
                   type="text"
-                  placeholder="e.g. Implement JMeter Test Script"
+                  placeholder="e.g. Implement Postman automated assertions"
                   value={newCardTitle}
                   onChange={(e) => setNewCardTitle(e.target.value)}
-                  style={{ width: '100%', padding: '10px', borderRadius: '6px', backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-subtle)', color: '#ffffff' }}
+                  style={{ width: '100%', padding: '10px', borderRadius: '6px', backgroundColor: '#0f172a', border: '1px solid #334155', color: '#f8fafc', outline: 'none' }}
                 />
               </div>
               <div>
-                <label style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>DESCRIPTION</label>
+                <label style={{ fontSize: '12px', fontWeight: 700, color: '#94a3b8', display: 'block', marginBottom: '6px' }}>DESCRIPTION</label>
                 <textarea
-                  placeholder="Add details, acceptance criteria, or notes..."
+                  placeholder="Add details or notes..."
                   value={newCardDesc}
                   onChange={(e) => setNewCardDesc(e.target.value)}
                   rows={3}
-                  style={{ width: '100%', padding: '10px', borderRadius: '6px', backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-subtle)', color: '#ffffff', resize: 'vertical' }}
+                  style={{ width: '100%', padding: '10px', borderRadius: '6px', backgroundColor: '#0f172a', border: '1px solid #334155', color: '#f8fafc', resize: 'vertical', outline: 'none' }}
                 />
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div>
-                  <label style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>COLUMN</label>
+                  <label style={{ fontSize: '12px', fontWeight: 700, color: '#94a3b8', display: 'block', marginBottom: '6px' }}>COLUMN</label>
                   <select
                     value={newCardList}
                     onChange={(e) => setNewCardList(e.target.value)}
-                    style={{ width: '100%', padding: '10px', borderRadius: '6px', backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-subtle)', color: '#ffffff' }}
+                    style={{ width: '100%', padding: '10px', borderRadius: '6px', backgroundColor: '#0f172a', border: '1px solid #334155', color: '#f8fafc', outline: 'none' }}
                   >
                     <option value="todo">📌 To Do</option>
                     <option value="in-progress">⚡ In Progress</option>
@@ -1136,11 +1173,11 @@ export default function App() {
                   </select>
                 </div>
                 <div>
-                  <label style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>PRIORITY</label>
+                  <label style={{ fontSize: '12px', fontWeight: 700, color: '#94a3b8', display: 'block', marginBottom: '6px' }}>PRIORITY</label>
                   <select
                     value={newCardPriority}
                     onChange={(e) => setNewCardPriority(e.target.value)}
-                    style={{ width: '100%', padding: '10px', borderRadius: '6px', backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-subtle)', color: '#ffffff' }}
+                    style={{ width: '100%', padding: '10px', borderRadius: '6px', backgroundColor: '#0f172a', border: '1px solid #334155', color: '#f8fafc', outline: 'none' }}
                   >
                     <option value="urgent">🔴 Urgent</option>
                     <option value="high">🟡 High</option>
@@ -1150,11 +1187,11 @@ export default function App() {
                 </div>
               </div>
               <div>
-                <label style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>ASSIGN TO</label>
+                <label style={{ fontSize: '12px', fontWeight: 700, color: '#94a3b8', display: 'block', marginBottom: '6px' }}>ASSIGN TO</label>
                 <select
                   value={newCardAssignee}
                   onChange={(e) => setNewCardAssignee(e.target.value)}
-                  style={{ width: '100%', padding: '10px', borderRadius: '6px', backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-subtle)', color: '#ffffff' }}
+                  style={{ width: '100%', padding: '10px', borderRadius: '6px', backgroundColor: '#0f172a', border: '1px solid #334155', color: '#f8fafc', outline: 'none' }}
                 >
                   <option value="">Unassigned</option>
                   {members.map(m => (
@@ -1163,8 +1200,8 @@ export default function App() {
                 </select>
               </div>
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
-                <button type="button" onClick={() => setShowCardModal(false)} style={{ padding: '8px 16px', background: 'transparent', color: 'var(--text-muted)', border: 'none', cursor: 'pointer' }}>Cancel</button>
-                <button type="submit" style={{ padding: '8px 18px', backgroundColor: 'var(--accent-trello)', color: '#ffffff', border: 'none', borderRadius: '6px', fontWeight: 600, cursor: 'pointer' }}>Create Card</button>
+                <button type="button" onClick={() => setShowCardModal(false)} style={{ padding: '8px 16px', background: 'transparent', color: '#94a3b8', border: 'none', cursor: 'pointer', fontWeight: 600 }}>Cancel</button>
+                <button type="submit" style={{ padding: '8px 18px', backgroundColor: '#0284c7', color: '#ffffff', border: 'none', borderRadius: '6px', fontWeight: 700, cursor: 'pointer' }}>Create Card</button>
               </div>
             </form>
           </div>

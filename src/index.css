@@ -1,21 +1,33 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 :root {
-  --bg-primary: #0f172a;
-  --bg-secondary: #1e293b;
-  --bg-tertiary: #334155;
-  --bg-card: #1e293b;
-  --text-main: #f8fafc;
-  --text-muted: #94a3b8;
-  --text-dim: #64748b;
-  --accent-discord: #5865f2;
-  --accent-discord-hover: #4752c4;
-  --accent-trello: #0284c7;
-  --accent-success: #10b981;
-  --accent-warning: #f59e0b;
-  --accent-danger: #ef4444;
-  --border-subtle: #334155;
-  --border-focus: #6366f1;
+  --font-main: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-heading: 'Outfit', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  /* Discord Theme Palette */
+  --dc-bg-server: #1e1f22;
+  --dc-bg-sidebar: #2b2d31;
+  --dc-bg-chat: #313338;
+  --dc-bg-input: #383a40;
+  --dc-bg-hover: #35373c;
+  --dc-bg-active: #404249;
+  --dc-text-normal: #dbdee1;
+  --dc-text-muted: #949ba4;
+  --dc-text-header: #f2f3f5;
+  --dc-brand: #5865f2;
+  --dc-brand-hover: #4752c4;
+  --dc-danger: #f23f43;
+  --dc-success: #23a55a;
+  --dc-warning: #f0b232;
+  --dc-border: #1f2023;
+
+  /* Trello Palette */
+  --tr-bg: #0f172a;
+  --tr-column: #1e293b;
+  --tr-card: #334155;
+  --tr-card-hover: #3e4c5f;
+  --tr-brand: #0284c7;
 }
 
 * {
@@ -24,16 +36,24 @@
   padding: 0;
 }
 
-body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background-color: var(--bg-primary);
-  color: var(--text-main);
-  min-height: 100vh;
-  overflow-x: hidden;
+html, body, #root {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  background-color: var(--dc-bg-chat);
+  color: var(--dc-text-normal);
+  font-family: var(--font-main);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-code, pre {
-  font-family: 'JetBrains Mono', monospace;
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading);
+  color: var(--dc-text-header);
+}
+
+button, input, select, textarea {
+  font-family: inherit;
 }
 
 /* Custom Scrollbar */
@@ -42,31 +62,31 @@ code, pre {
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: var(--bg-primary);
+  background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--bg-tertiary);
+  background: rgba(255, 255, 255, 0.15);
   border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--text-dim);
+  background: rgba(255, 255, 255, 0.3);
 }
 
 /* Animations */
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(6px); }
+  from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes pulseGlow {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.9); }
 }
 
-.animate-fade-in {
-  animation: fadeIn 0.25s ease-out forwards;
+.fade-in {
+  animation: fadeIn 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-.pulse-dot {
-  animation: pulseGlow 2s infinite ease-in-out;
+.status-pulse {
+  animation: pulseGlow 2.5s infinite ease-in-out;
 }
