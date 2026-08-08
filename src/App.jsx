@@ -3,26 +3,62 @@ import React, { useState, useEffect, useRef } from 'react';
 const API_BASE = '/api';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('discord'); // 'discord' | 'trello' | 'stats'
+  // Current Authenticated User
+  const [currentUser, setCurrentUser] = useState(() => {
+    const saved = localStorage.getItem('rosetta_user');
+    return saved ? JSON.parse(saved) : null;
+  });
+
+  // Layout View Modes: 'split' (side-by-side) | 'messages' | 'board'
+  const [layoutMode, setLayoutMode] = useState('split');
+  const [showChannelsSidebar, setShowChannelsSidebar] = useState(true);
+  const [showNetworkModal, setShowNetworkModal] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authTab, setAuthTab] = useState('login'); // 'login' | 'register'
+
+  // Auth Form State
+  const [authUsername, setAuthUsername] = useState('');
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [authFullName, setAuthFullName] = useState('');
+  const [authRole, setAuthRole] = useState('Member');
+  const [authError, setAuthError] = useState('');
+
+  // Core Data
   const [channels, setChannels] = useState([]);
   const [activeChannelId, setActiveChannelId] = useState('');
-  const [members, setMembers] = useState([]);
   const [messages, setMessages] = useState([]);
   const [cards, setCards] = useState([]);
-  const [stats, setStats] = useState(null);
-  const [health, setHealth] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [boardConfig, setBoardConfig] = useState({
+    title: "Sprint Alpha Board",
+    columns: [
+      { id: "todo", title: "To Do" },
+      { id: "in-progress", title: "In Progress" },
+      { id: "review", title: "Review" },
+      { id: "done", title: "Done" }
+    ]
+  });
 
-  // Form states
+  // Message Editing State
+  const [editingMessageId, setEditingMessageId] = useState(null);
+  const [editingMessageText, setEditingMessageText] = useState('');
+
+  // Board / Column Editing State
+  const [editingBoardTitle, setEditingBoardTitle] = useState(false);
+  const [tempBoardTitle, setTempBoardTitle] = useState('');
+  const [editingColumnId, setEditingColumnId] = useState(null);
+  const [tempColumnTitle, setTempColumnTitle] = useState('');
+
+  // Network & Connections Data
+  const [connections, setConnections] = useState({ known: [], pendingIncoming: [], pendingOutgoing: [] });
+  const [allUsers, setAllUsers] = useState([]);
+  const [userSearchQuery, setUserSearchQuery] = useState('');
+
+  // Modals & Form States
   const [newMessageText, setNewMessageText] = useState('');
-  const [selectedSenderId, setSelectedSenderId] = useState('');
   const [showChannelModal, setShowChannelModal] = useState(false);
   const [newChannelName, setNewChannelName] = useState('');
   const [newChannelDesc, setNewChannelDesc] = useState('');
-  const [showMemberModal, setShowMemberModal] = useState(false);
-  const [newMemberName, setNewMemberName] = useState('');
-  const [newMemberUsername, setNewMemberUsername] = useState('');
-  const [newMemberRole, setNewMemberRole] = useState('Member');
   const [showCardModal, setShowCardModal] = useState(false);
   const [newCardTitle, setNewCardTitle] = useState('');
   const [newCardDesc, setNewCardDesc] = useState('');
@@ -33,71 +69,61 @@ export default function App() {
 
   const messagesEndRef = useRef(null);
 
-  // Initial Fetch
+  // Initial Load
   useEffect(() => {
     fetchInitialData();
-    const interval = setInterval(fetchStatsAndHealth, 10000);
-    return () => clearInterval(interval);
   }, []);
 
-  // Fetch messages when active channel changes
+  // Sync Current User to LocalStorage & auto-login first seed user if none
+  useEffect(() => {
+    if (currentUser) {
+      localStorage.setItem('rosetta_user', JSON.stringify(currentUser));
+      fetchConnections(currentUser.id);
+    }
+  }, [currentUser]);
+
+  // Fetch messages on channel switch
   useEffect(() => {
     if (activeChannelId) {
       fetchMessages(activeChannelId);
     }
   }, [activeChannelId]);
 
-  // Scroll to bottom of chat
+  // Auto scroll messages
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    if (!editingMessageId) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages, editingMessageId]);
 
   const fetchInitialData = async () => {
     try {
-      setLoading(true);
-      const [chRes, memRes, cardRes, statsRes, healthRes] = await Promise.all([
+      const [chRes, cardRes, boardRes, usersRes] = await Promise.all([
         fetch(`${API_BASE}/channels`),
-        fetch(`${API_BASE}/members`),
         fetch(`${API_BASE}/cards`),
-        fetch(`${API_BASE}/stats`),
-        fetch(`${API_BASE}/health`)
+        fetch(`${API_BASE}/board/config`),
+        fetch(`${API_BASE}/users`)
       ]);
 
       const chData = await chRes.json();
-      const memData = await memRes.json();
       const cardData = await cardRes.json();
-      const stData = await statsRes.json();
-      const hlData = await healthRes.json();
+      const boardData = await boardRes.json();
+      const usersData = await usersRes.json();
 
       setChannels(Array.isArray(chData) ? chData : []);
-      setMembers(Array.isArray(memData) ? memData : []);
       setCards(Array.isArray(cardData) ? cardData : []);
-      setStats(stData);
-      setHealth(hlData);
+      if (boardData && boardData.columns) setBoardConfig(boardData);
+      setAllUsers(Array.isArray(usersData) ? usersData : []);
 
       if (Array.isArray(chData) && chData.length > 0) {
         setActiveChannelId(chData[0].id);
       }
-      if (Array.isArray(memData) && memData.length > 0) {
-        setSelectedSenderId(memData[0].id);
+
+      if (!currentUser && Array.isArray(usersData) && usersData.length > 0) {
+        setCurrentUser(usersData[0]);
       }
     } catch (err) {
-      console.error('Error fetching data:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchStatsAndHealth = async () => {
-    try {
-      const [statsRes, healthRes] = await Promise.all([
-        fetch(`${API_BASE}/stats`),
-        fetch(`${API_BASE}/health`)
-      ]);
-      setStats(await statsRes.json());
-      setHealth(await healthRes.json());
-    } catch (err) {
-      console.error('Error polling stats:', err);
+      console.error('Error fetching initial data:', err);
     }
   };
 
@@ -111,91 +137,104 @@ export default function App() {
     }
   };
 
-  // Channel Handlers
-  const handleCreateChannel = async (e) => {
-    e.preventDefault();
-    if (!newChannelName.trim()) return;
+  const fetchConnections = async (userId) => {
+    if (!userId) return;
     try {
-      const res = await fetch(`${API_BASE}/channels`, {
+      const res = await fetch(`${API_BASE}/connections?userId=${userId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setConnections(data);
+      }
+    } catch (err) {
+      console.error('Error fetching connections:', err);
+    }
+  };
+
+  // Auth Handlers (with Email)
+  const handleAuthSubmit = async (e) => {
+    e.preventDefault();
+    setAuthError('');
+    const endpoint = authTab === 'login' ? '/api/auth/login' : '/api/auth/register';
+    const payload = authTab === 'login' 
+      ? { username: authUsername, password: authPassword }
+      : { username: authUsername, email: authEmail, password: authPassword, name: authFullName, role: authRole };
+
+    try {
+      const res = await fetch(`${API_BASE}${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: newChannelName,
-          description: newChannelDesc,
-          category: 'Text Channels'
-        })
+        body: JSON.stringify(payload)
       });
-      if (res.ok) {
-        const created = await res.json();
-        setChannels([...channels, created]);
-        setActiveChannelId(created.id);
-        setNewChannelName('');
-        setNewChannelDesc('');
-        setShowChannelModal(false);
+      const data = await res.json();
+      if (!res.ok) {
+        setAuthError(data.error || 'Authentication failed');
+        return;
       }
+      setCurrentUser(data);
+      setShowAuthModal(false);
+      setAuthUsername('');
+      setAuthEmail('');
+      setAuthPassword('');
+      setAuthFullName('');
+      fetchInitialData();
     } catch (err) {
-      console.error('Error creating channel:', err);
+      setAuthError('Server error during authentication');
     }
   };
 
-  const handleDeleteChannel = async (id, isDefault) => {
-    if (isDefault) {
-      alert('Cannot delete the default #general channel');
-      return;
-    }
-    if (!confirm('Are you sure you want to delete this channel?')) return;
-    try {
-      const res = await fetch(`${API_BASE}/channels/${id}`, { method: 'DELETE' });
-      if (res.ok) {
-        const remaining = channels.filter(c => c.id !== id);
-        setChannels(remaining);
-        if (activeChannelId === id && remaining.length > 0) {
-          setActiveChannelId(remaining[0].id);
-        }
-      }
-    } catch (err) {
-      console.error('Error deleting channel:', err);
-    }
+  const handleLogout = () => {
+    localStorage.removeItem('rosetta_user');
+    setCurrentUser(null);
+    setShowAuthModal(true);
+    setAuthTab('login');
   };
 
-  // Member Handlers
-  const handleCreateMember = async (e) => {
-    e.preventDefault();
-    if (!newMemberName.trim() || !newMemberUsername.trim()) return;
+  // Known Connection Handlers
+  const handleSendKnownRequest = async (receiverId) => {
+    if (!currentUser) return;
     try {
-      const res = await fetch(`${API_BASE}/members`, {
+      const res = await fetch(`${API_BASE}/connections/request`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: newMemberName,
-          username: newMemberUsername,
-          role: newMemberRole,
-          status: 'online'
-        })
+        body: JSON.stringify({ senderId: currentUser.id, receiverId })
       });
       if (res.ok) {
-        const created = await res.json();
-        setMembers([...members, created]);
-        setNewMemberName('');
-        setNewMemberUsername('');
-        setShowMemberModal(false);
+        fetchConnections(currentUser.id);
+      } else {
+        const err = await res.json();
+        alert(err.error || 'Failed to send request');
       }
     } catch (err) {
-      console.error('Error creating member:', err);
+      console.error('Error sending request:', err);
     }
   };
 
-  // Message Handlers
+  const handleUpdateConnection = async (connectionId, status) => {
+    try {
+      const res = await fetch(`${API_BASE}/connections/${connectionId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status, userId: currentUser.id })
+      });
+      if (res.ok) {
+        fetchConnections(currentUser.id);
+      }
+    } catch (err) {
+      console.error('Error updating connection:', err);
+    }
+  };
+
+  // Message Handlers (Send, Edit, Delete)
   const handleSendMessage = async (e) => {
     e.preventDefault();
-    if (!newMessageText.trim() || !activeChannelId || !selectedSenderId) return;
+    if (!newMessageText.trim() || !activeChannelId || !currentUser) return;
     try {
       const res = await fetch(`${API_BASE}/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           channelId: activeChannelId,
-          senderId: selectedSenderId,
+          senderId: currentUser.id,
           text: newMessageText
         })
       });
@@ -203,10 +242,31 @@ export default function App() {
         const created = await res.json();
         setMessages([...messages, created]);
         setNewMessageText('');
-        fetchStatsAndHealth();
       }
     } catch (err) {
       console.error('Error sending message:', err);
+    }
+  };
+
+  const handleSaveEditedMessage = async (msgId) => {
+    if (!editingMessageText.trim()) return;
+    try {
+      const res = await fetch(`${API_BASE}/messages/${msgId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: editingMessageText,
+          senderId: currentUser?.id
+        })
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setMessages(messages.map(m => m.id === msgId ? updated : m));
+        setEditingMessageId(null);
+        setEditingMessageText('');
+      }
+    } catch (err) {
+      console.error('Error editing message:', err);
     }
   };
 
@@ -215,10 +275,51 @@ export default function App() {
       const res = await fetch(`${API_BASE}/messages/${id}`, { method: 'DELETE' });
       if (res.ok) {
         setMessages(messages.filter(m => m.id !== id));
-        fetchStatsAndHealth();
       }
     } catch (err) {
       console.error('Error deleting message:', err);
+    }
+  };
+
+  // Board & Column Configuration Handlers
+  const handleSaveBoardTitle = async () => {
+    if (!tempBoardTitle.trim()) {
+      setEditingBoardTitle(false);
+      return;
+    }
+    const updated = { ...boardConfig, title: tempBoardTitle.trim() };
+    setBoardConfig(updated);
+    setEditingBoardTitle(false);
+    try {
+      await fetch(`${API_BASE}/board/config`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updated)
+      });
+    } catch (err) {
+      console.error('Error updating board title:', err);
+    }
+  };
+
+  const handleSaveColumnTitle = async (colId) => {
+    if (!tempColumnTitle.trim()) {
+      setEditingColumnId(null);
+      return;
+    }
+    const updatedCols = boardConfig.columns.map(c => 
+      c.id === colId ? { ...c, title: tempColumnTitle.trim() } : c
+    );
+    const updated = { ...boardConfig, columns: updatedCols };
+    setBoardConfig(updated);
+    setEditingColumnId(null);
+    try {
+      await fetch(`${API_BASE}/board/config`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updated)
+      });
+    } catch (err) {
+      console.error('Error updating column name:', err);
     }
   };
 
@@ -235,7 +336,7 @@ export default function App() {
           description: newCardDesc,
           list: newCardList,
           priority: newCardPriority,
-          assignedTo: newCardAssignee || null
+          assignedTo: newCardAssignee || (currentUser ? currentUser.id : null)
         })
       });
       if (res.ok) {
@@ -244,7 +345,6 @@ export default function App() {
         setNewCardTitle('');
         setNewCardDesc('');
         setShowCardModal(false);
-        fetchStatsAndHealth();
       }
     } catch (err) {
       console.error('Error creating card:', err);
@@ -252,17 +352,16 @@ export default function App() {
   };
 
   const handleMoveCard = async (cardId, currentList, direction) => {
-    const listOrder = ['todo', 'in-progress', 'review', 'done'];
-    const currentIndex = listOrder.indexOf(currentList);
-    const targetIndex = direction === 'right' ? currentIndex + 1 : currentIndex - 1;
-    if (targetIndex < 0 || targetIndex >= listOrder.length) return;
+    const listOrder = boardConfig.columns.map(c => c.id);
+    const idx = listOrder.indexOf(currentList);
+    const targetIdx = direction === 'right' ? idx + 1 : idx - 1;
+    if (targetIdx < 0 || targetIdx >= listOrder.length) return;
 
-    const targetList = listOrder[targetIndex];
     try {
       const res = await fetch(`${API_BASE}/cards/${cardId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ list: targetList })
+        body: JSON.stringify({ list: listOrder[targetIdx] })
       });
       if (res.ok) {
         const updated = await res.json();
@@ -278,699 +377,636 @@ export default function App() {
       const res = await fetch(`${API_BASE}/cards/${id}`, { method: 'DELETE' });
       if (res.ok) {
         setCards(cards.filter(c => c.id !== id));
-        fetchStatsAndHealth();
       }
     } catch (err) {
       console.error('Error deleting card:', err);
     }
   };
 
-  const activeChannel = channels.find(c => c.id === activeChannelId) || { name: 'general', description: '' };
-  const currentMember = members.find(m => m.id === selectedSenderId) || members[0] || { name: 'Tanjim Hossen', username: 'tanjim', role: 'Admin' };
+  // Channel Handlers
+  const handleCreateChannel = async (e) => {
+    e.preventDefault();
+    if (!newChannelName.trim()) return;
+    try {
+      const res = await fetch(`${API_BASE}/channels`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newChannelName, description: newChannelDesc })
+      });
+      if (res.ok) {
+        const created = await res.json();
+        setChannels([...channels, created]);
+        setActiveChannelId(created.id);
+        setNewChannelName('');
+        setNewChannelDesc('');
+        setShowChannelModal(false);
+      }
+    } catch (err) {
+      console.error('Error creating channel:', err);
+    }
+  };
 
+  const handleDeleteChannel = async (id, isDefault) => {
+    if (isDefault) return alert('Cannot delete default general channel');
+    if (!confirm('Delete this channel?')) return;
+    try {
+      const res = await fetch(`${API_BASE}/channels/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        const remaining = channels.filter(c => c.id !== id);
+        setChannels(remaining);
+        if (activeChannelId === id && remaining.length > 0) setActiveChannelId(remaining[0].id);
+      }
+    } catch (err) {
+      console.error('Error deleting channel:', err);
+    }
+  };
+
+  const activeChannel = channels.find(c => c.id === activeChannelId) || { name: 'general', description: '' };
   const filteredCards = cardFilterPriority === 'all' 
     ? cards 
     : cards.filter(c => c.priority === cardFilterPriority);
 
-  const getPriorityBadge = (priority) => {
+  const getPriorityStyle = (priority) => {
     switch (priority) {
-      case 'urgent': return { bg: 'rgba(242, 63, 67, 0.2)', border: '#f23f43', text: '#f23f43' };
-      case 'high': return { bg: 'rgba(240, 178, 50, 0.2)', border: '#f0b232', text: '#f0b232' };
-      case 'medium': return { bg: 'rgba(88, 101, 242, 0.2)', border: '#5865f2', text: '#5865f2' };
-      default: return { bg: 'rgba(35, 165, 90, 0.2)', border: '#23a55a', text: '#23a55a' };
-    }
-  };
-
-  const getStatusDotColor = (status) => {
-    switch (status) {
-      case 'online': return '#23a55a';
-      case 'idle': return '#f0b232';
-      case 'dnd': return '#f23f43';
-      default: return '#80848e';
+      case 'urgent': return { bg: '#ef4444', text: '#ffffff' };
+      case 'high': return { bg: '#f59e0b', text: '#ffffff' };
+      case 'medium': return { bg: '#3b82f6', text: '#ffffff' };
+      default: return { bg: '#10b981', text: '#ffffff' };
     }
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw', backgroundColor: '#313338', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw', backgroundColor: '#0f172a', color: '#f8fafc', overflow: 'hidden' }}>
       
       {/* ============================================================ */}
-      {/* TOP APPLICATION BAR */}
+      {/* TOP HEADER & LAYOUT NAVIGATION */}
       {/* ============================================================ */}
       <header style={{
-        height: '56px',
-        backgroundColor: '#1e1f22',
-        borderBottom: '1px solid #1f2023',
+        height: '52px',
+        backgroundColor: '#1e293b',
+        borderBottom: '1px solid #334155',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        padding: '0 20px',
+        padding: '0 16px',
         flexShrink: 0,
-        zIndex: 10
+        zIndex: 20
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-          
-          {/* LOGO & BRAND */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        {/* LOGO & DUAL PANE SWITCHER */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+          <button
+            onClick={() => setShowChannelsSidebar(!showChannelsSidebar)}
+            title="Toggle Channels Panel"
+            style={{
+              background: '#334155',
+              border: 'none',
+              color: '#f8fafc',
+              borderRadius: '6px',
+              padding: '6px 10px',
+              cursor: 'pointer',
+              fontSize: '13px',
+              fontWeight: 700
+            }}
+          >
+            ☰ Channels
+          </button>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <div style={{
-              width: '36px',
-              height: '36px',
-              borderRadius: '12px',
-              background: 'linear-gradient(135deg, #5865f2, #0284c7)',
+              width: '30px',
+              height: '30px',
+              borderRadius: '8px',
+              background: 'linear-gradient(135deg, #6366f1, #06b6d4)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               fontWeight: 800,
-              fontSize: '18px',
-              color: '#ffffff',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.3)'
+              fontSize: '15px',
+              color: '#fff'
             }}>R</div>
-            <div>
-              <div style={{ fontSize: '16px', fontWeight: 800, color: '#f2f3f5', letterSpacing: '-0.02em', lineHeight: 1.1 }}>Rosetta</div>
-              <div style={{ fontSize: '11px', color: '#949ba4', fontWeight: 500 }}>Discord & Trello Workspace</div>
-            </div>
+            <span style={{ fontSize: '16px', fontWeight: 800 }}>Rosetta</span>
           </div>
 
-          {/* VIEW SWITCHER BUTTONS */}
-          <nav style={{ display: 'flex', gap: '8px', marginLeft: '16px' }}>
+          {/* VIEW SELECTOR */}
+          <div style={{ display: 'flex', backgroundColor: '#0f172a', padding: '3px', borderRadius: '8px', gap: '3px' }}>
             <button
-              onClick={() => setActiveTab('discord')}
+              onClick={() => setLayoutMode('split')}
               style={{
-                padding: '6px 14px',
-                borderRadius: '8px',
+                padding: '5px 12px',
+                borderRadius: '6px',
                 border: 'none',
                 cursor: 'pointer',
-                fontSize: '13px',
-                fontWeight: 600,
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                backgroundColor: activeTab === 'discord' ? '#5865f2' : 'transparent',
-                color: activeTab === 'discord' ? '#ffffff' : '#949ba4',
-                transition: 'all 0.15s ease'
+                fontSize: '12px',
+                fontWeight: 700,
+                backgroundColor: layoutMode === 'split' ? '#6366f1' : 'transparent',
+                color: layoutMode === 'split' ? '#ffffff' : '#94a3b8'
               }}
             >
-              💬 Discord Hub
+              ◧ Side-by-Side (Split)
             </button>
             <button
-              onClick={() => setActiveTab('trello')}
+              onClick={() => setLayoutMode('messages')}
               style={{
-                padding: '6px 14px',
-                borderRadius: '8px',
+                padding: '5px 12px',
+                borderRadius: '6px',
                 border: 'none',
                 cursor: 'pointer',
-                fontSize: '13px',
-                fontWeight: 600,
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                backgroundColor: activeTab === 'trello' ? '#0284c7' : 'transparent',
-                color: activeTab === 'trello' ? '#ffffff' : '#949ba4',
-                transition: 'all 0.15s ease'
+                fontSize: '12px',
+                fontWeight: 700,
+                backgroundColor: layoutMode === 'messages' ? '#6366f1' : 'transparent',
+                color: layoutMode === 'messages' ? '#ffffff' : '#94a3b8'
               }}
             >
-              📋 Trello Board
+              💬 Messages Only
             </button>
             <button
-              onClick={() => setActiveTab('stats')}
+              onClick={() => setLayoutMode('board')}
               style={{
-                padding: '6px 14px',
-                borderRadius: '8px',
+                padding: '5px 12px',
+                borderRadius: '6px',
                 border: 'none',
                 cursor: 'pointer',
-                fontSize: '13px',
-                fontWeight: 600,
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                backgroundColor: activeTab === 'stats' ? '#35373c' : 'transparent',
-                color: activeTab === 'stats' ? '#ffffff' : '#949ba4',
-                transition: 'all 0.15s ease'
+                fontSize: '12px',
+                fontWeight: 700,
+                backgroundColor: layoutMode === 'board' ? '#6366f1' : 'transparent',
+                color: layoutMode === 'board' ? '#ffffff' : '#94a3b8'
               }}
             >
-              📊 Diagnostics
+              📋 Board Only
             </button>
-          </nav>
+          </div>
         </div>
 
-        {/* SERVER STATUS INDICATOR */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            padding: '5px 12px',
-            borderRadius: '20px',
-            backgroundColor: '#2b2d31',
-            border: '1px solid #1f2023',
-            fontSize: '12px',
-            color: '#dbdee1'
-          }}>
-            <span className="status-pulse" style={{
-              width: '8px',
-              height: '8px',
-              borderRadius: '50%',
-              backgroundColor: health?.status === 'ok' ? '#23a55a' : '#f23f43'
-            }}></span>
-            <span style={{ fontWeight: 600 }}>API Online</span>
-            <span style={{ color: '#4e5058' }}>|</span>
-            <span style={{ color: '#949ba4' }}>Uptime: {health?.uptimeSeconds || 0}s</span>
-          </div>
+        {/* PROFILE & KNOWN CONTACTS */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <button
+            onClick={() => {
+              setShowNetworkModal(true);
+              if (currentUser) fetchConnections(currentUser.id);
+            }}
+            style={{
+              padding: '6px 12px',
+              backgroundColor: '#334155',
+              color: '#f8fafc',
+              border: 'none',
+              borderRadius: '6px',
+              fontSize: '12px',
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+          >
+            👥 Known Contacts ({connections.known?.length || 0})
+            {connections.pendingIncoming?.length > 0 && (
+              <span style={{ backgroundColor: '#ef4444', color: '#fff', padding: '1px 6px', borderRadius: '10px', fontSize: '10px', fontWeight: 800 }}>
+                {connections.pendingIncoming.length}
+              </span>
+            )}
+          </button>
+
+          {currentUser ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <img
+                  src={currentUser.avatar || "https://api.dicebear.com/7.x/bottts/svg?seed=tanjim"}
+                  alt=""
+                  style={{ width: '28px', height: '28px', borderRadius: '50%', objectFit: 'cover' }}
+                />
+                <div style={{ textAlign: 'left' }}>
+                  <div style={{ fontSize: '12px', fontWeight: 700, lineHeight: 1.1 }}>{currentUser.name}</div>
+                  <div style={{ fontSize: '10px', color: '#94a3b8' }}>{currentUser.email || `@${currentUser.username}`}</div>
+                </div>
+              </div>
+              <button
+                onClick={handleLogout}
+                style={{ padding: '4px 8px', backgroundColor: 'transparent', border: '1px solid #475569', color: '#94a3b8', borderRadius: '4px', fontSize: '11px', cursor: 'pointer' }}
+              >Logout</button>
+            </div>
+          ) : (
+            <button
+              onClick={() => { setShowAuthModal(true); setAuthTab('login'); }}
+              style={{ padding: '6px 14px', backgroundColor: '#6366f1', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}
+            >
+              Sign In / Register
+            </button>
+          )}
         </div>
       </header>
 
       {/* ============================================================ */}
-      {/* MAIN CONTAINER */}
+      {/* WORKSPACE BODY (CHANNELS + MESSAGES + BOARD) */}
       {/* ============================================================ */}
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
 
-        {/* ============================================================ */}
-        {/* VIEW 1: DISCORD HUB (Channels + Text Chat + Members Directory) */}
-        {/* ============================================================ */}
-        {activeTab === 'discord' && (
-          <div style={{ display: 'flex', width: '100%', height: '100%' }} className="fade-in">
-            
-            {/* LEFT SIDEBAR: CHANNELS */}
-            <aside style={{
-              width: '240px',
-              backgroundColor: '#2b2d31',
-              borderRight: '1px solid #1f2023',
-              display: 'flex',
-              flexDirection: 'column',
-              flexShrink: 0
-            }}>
-              <div style={{
-                padding: '14px 16px',
-                borderBottom: '1px solid #1f2023',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center'
-              }}>
-                <span style={{ fontSize: '12px', fontWeight: 800, textTransform: 'uppercase', color: '#949ba4', letterSpacing: '0.04em' }}>
-                  Text Channels
-                </span>
-                <button
-                  onClick={() => setShowChannelModal(true)}
-                  title="Create Channel"
-                  style={{
-                    background: 'transparent',
-                    border: 'none',
-                    color: '#dbdee1',
-                    cursor: 'pointer',
-                    fontSize: '18px',
-                    fontWeight: 700,
-                    lineHeight: 1
-                  }}
-                >+</button>
-              </div>
+        {/* 1. CHANNELS DRAWER */}
+        {showChannelsSidebar && (
+          <aside style={{
+            width: '210px',
+            backgroundColor: '#1e293b',
+            borderRight: '1px solid #334155',
+            display: 'flex',
+            flexDirection: 'column',
+            flexShrink: 0
+          }}>
+            <div style={{ padding: '12px 14px', borderBottom: '1px solid #334155', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', color: '#94a3b8' }}>Channels</span>
+              <button onClick={() => setShowChannelModal(true)} style={{ background: 'transparent', border: 'none', color: '#f8fafc', cursor: 'pointer', fontSize: '16px', fontWeight: 800 }}>+</button>
+            </div>
 
-              {/* CHANNELS LIST */}
-              <div style={{ flex: 1, overflowY: 'auto', padding: '8px' }}>
-                {channels.map(channel => {
-                  const isActive = activeChannelId === channel.id;
-                  return (
-                    <div
-                      key={channel.id}
-                      onClick={() => setActiveChannelId(channel.id)}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        padding: '8px 12px',
-                        borderRadius: '6px',
-                        cursor: 'pointer',
-                        marginBottom: '4px',
-                        backgroundColor: isActive ? '#35373c' : 'transparent',
-                        color: isActive ? '#ffffff' : '#949ba4',
-                        fontSize: '14px',
-                        fontWeight: isActive ? 600 : 500,
-                        transition: 'all 0.15s ease'
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden' }}>
-                        <span style={{ color: isActive ? '#dbdee1' : '#80848e', fontSize: '16px' }}>#</span>
-                        <span style={{ whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>{channel.name}</span>
-                      </div>
-                      {!channel.isDefault && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteChannel(channel.id, channel.isDefault);
-                          }}
-                          title="Delete channel"
-                          style={{
-                            background: 'transparent',
-                            border: 'none',
-                            color: '#80848e',
-                            cursor: 'pointer',
-                            fontSize: '12px',
-                            padding: '2px 4px'
-                          }}
-                        >✕</button>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* LOGGED IN MEMBER FOOTER */}
-              <div style={{
-                padding: '12px 14px',
-                borderTop: '1px solid #1f2023',
-                backgroundColor: '#232428',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '10px'
-              }}>
-                <div style={{ position: 'relative' }}>
-                  <img
-                    src={currentMember.avatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80"}
-                    alt="Current user"
-                    style={{ width: '34px', height: '34px', borderRadius: '50%', objectFit: 'cover' }}
-                  />
-                  <span style={{
-                    position: 'absolute',
-                    bottom: 0,
-                    right: 0,
-                    width: '10px',
-                    height: '10px',
-                    borderRadius: '50%',
-                    backgroundColor: getStatusDotColor(currentMember.status),
-                    border: '2px solid #232428'
-                  }}></span>
-                </div>
-                <div style={{ overflow: 'hidden' }}>
-                  <div style={{ fontSize: '13px', fontWeight: 700, color: '#f2f3f5', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>{currentMember.name}</div>
-                  <div style={{ fontSize: '11px', color: '#949ba4' }}>@{currentMember.username} ({currentMember.role})</div>
-                </div>
-              </div>
-            </aside>
-
-            {/* MIDDLE PANE: CHAT STREAM */}
-            <main style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: '#313338' }}>
-              
-              {/* CHANNEL TOP HEADER */}
-              <div style={{
-                height: '52px',
-                borderBottom: '1px solid #1f2023',
-                display: 'flex',
-                alignItems: 'center',
-                padding: '0 20px',
-                gap: '12px',
-                flexShrink: 0
-              }}>
-                <span style={{ fontSize: '22px', color: '#80848e', fontWeight: 700 }}>#</span>
-                <span style={{ fontSize: '16px', fontWeight: 700, color: '#f2f3f5' }}>{activeChannel.name}</span>
-                <span style={{ color: '#3f4147' }}>|</span>
-                <span style={{ fontSize: '13px', color: '#949ba4' }}>{activeChannel.description || 'Welcome to this channel!'}</span>
-              </div>
-
-              {/* MESSAGES LIST */}
-              <div style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column', gap: '18px' }}>
-                {messages.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: '60px 0', color: '#949ba4' }}>
-                    <div style={{
-                      width: '60px',
-                      height: '60px',
-                      borderRadius: '50%',
-                      backgroundColor: '#383a40',
+            <div style={{ flex: 1, overflowY: 'auto', padding: '8px' }}>
+              {channels.map(channel => {
+                const isActive = activeChannelId === channel.id;
+                return (
+                  <div
+                    key={channel.id}
+                    onClick={() => setActiveChannelId(channel.id)}
+                    style={{
                       display: 'flex',
                       alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: '32px',
-                      margin: '0 auto 16px auto',
-                      color: '#dbdee1'
-                    }}>#</div>
-                    <h3 style={{ fontSize: '20px', fontWeight: 800, color: '#f2f3f5', marginBottom: '6px' }}>Welcome to #{activeChannel.name}!</h3>
-                    <p style={{ fontSize: '14px', maxWidth: '400px', margin: '0 auto' }}>This is the beginning of the #{activeChannel.name} channel. Send a message below to start the conversation!</p>
-                  </div>
-                ) : (
-                  messages.map(msg => (
-                    <div key={msg.id} style={{ display: 'flex', gap: '14px', alignItems: 'flex-start' }}>
-                      <img
-                        src={msg.senderAvatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${msg.senderName}`}
-                        alt={msg.senderName}
-                        style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
-                      />
-                      <div style={{ flex: 1 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                          <span style={{ fontSize: '14px', fontWeight: 700, color: '#f2f3f5' }}>{msg.senderName}</span>
-                          <span style={{ fontSize: '11px', color: '#949ba4' }}>
-                            {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                        </div>
-                        <p style={{ fontSize: '14px', color: '#dbdee1', lineHeight: 1.5, wordBreak: 'break-word' }}>{msg.text}</p>
-                      </div>
-                      <button
-                        onClick={() => handleDeleteMessage(msg.id)}
-                        title="Delete Message"
-                        style={{
-                          background: 'transparent',
-                          border: 'none',
-                          color: '#80848e',
-                          cursor: 'pointer',
-                          fontSize: '13px',
-                          padding: '4px'
-                        }}
-                      >✕</button>
-                    </div>
-                  ))
-                )}
-                <div ref={messagesEndRef} />
-              </div>
-
-              {/* MESSAGE COMPOSER BAR */}
-              <div style={{ padding: '0 20px 20px 20px', flexShrink: 0 }}>
-                <form onSubmit={handleSendMessage} style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  backgroundColor: '#383a40',
-                  borderRadius: '8px',
-                  padding: '6px 14px',
-                  gap: '12px'
-                }}>
-                  {/* SENDER PICKER */}
-                  <select
-                    value={selectedSenderId}
-                    onChange={(e) => setSelectedSenderId(e.target.value)}
-                    style={{
-                      backgroundColor: '#2b2d31',
-                      color: '#f2f3f5',
-                      border: '1px solid #1f2023',
-                      padding: '8px 12px',
+                      justifyContent: 'space-between',
+                      padding: '8px 10px',
                       borderRadius: '6px',
-                      fontSize: '13px',
-                      fontWeight: 600,
                       cursor: 'pointer',
-                      outline: 'none'
+                      marginBottom: '4px',
+                      backgroundColor: isActive ? '#334155' : 'transparent',
+                      color: isActive ? '#ffffff' : '#94a3b8',
+                      fontSize: '13px',
+                      fontWeight: isActive ? 700 : 500
                     }}
                   >
-                    {members.map(m => (
-                      <option key={m.id} value={m.id}>{m.name} ({m.role})</option>
-                    ))}
-                  </select>
-
-                  <input
-                    type="text"
-                    placeholder={`Message #${activeChannel.name}...`}
-                    value={newMessageText}
-                    onChange={(e) => setNewMessageText(e.target.value)}
-                    style={{
-                      flex: 1,
-                      background: 'transparent',
-                      border: 'none',
-                      color: '#f2f3f5',
-                      fontSize: '14px',
-                      outline: 'none',
-                      padding: '8px 0'
-                    }}
-                  />
-
-                  <button
-                    type="submit"
-                    style={{
-                      padding: '8px 18px',
-                      backgroundColor: '#5865f2',
-                      color: '#ffffff',
-                      border: 'none',
-                      borderRadius: '6px',
-                      fontSize: '13px',
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                      transition: 'background-color 0.15s ease'
-                    }}
-                  >Send</button>
-                </form>
-              </div>
-            </main>
-
-            {/* RIGHT SIDEBAR: MEMBER DIRECTORY */}
-            <aside style={{
-              width: '240px',
-              backgroundColor: '#2b2d31',
-              borderLeft: '1px solid #1f2023',
-              padding: '16px',
-              display: 'flex',
-              flexDirection: 'column',
-              flexShrink: 0
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                <span style={{ fontSize: '12px', fontWeight: 800, textTransform: 'uppercase', color: '#949ba4', letterSpacing: '0.04em' }}>
-                  Members ({members.length})
-                </span>
-                <button
-                  onClick={() => setShowMemberModal(true)}
-                  title="Add Member"
-                  style={{
-                    background: 'transparent',
-                    border: 'none',
-                    color: '#dbdee1',
-                    cursor: 'pointer',
-                    fontSize: '18px',
-                    fontWeight: 700
-                  }}
-                >+</button>
-              </div>
-
-              <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                {members.map(member => (
-                  <div key={member.id} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <div style={{ position: 'relative' }}>
-                      <img
-                        src={member.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${member.username}`}
-                        alt={member.name}
-                        style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover' }}
-                      />
-                      <span style={{
-                        position: 'absolute',
-                        bottom: 0,
-                        right: 0,
-                        width: '10px',
-                        height: '10px',
-                        borderRadius: '50%',
-                        backgroundColor: getStatusDotColor(member.status),
-                        border: '2px solid #2b2d31'
-                      }}></span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden' }}>
+                      <span style={{ color: isActive ? '#818cf8' : '#64748b' }}>#</span>
+                      <span style={{ whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>{channel.name}</span>
                     </div>
-                    <div style={{ overflow: 'hidden' }}>
-                      <div style={{ fontSize: '13px', fontWeight: 700, color: '#f2f3f5' }}>{member.name}</div>
-                      <div style={{ fontSize: '11px', color: '#949ba4', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
-                        {member.role} {member.customStatus ? `• ${member.customStatus}` : ''}
-                      </div>
-                    </div>
+                    {!channel.isDefault && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteChannel(channel.id, channel.isDefault);
+                        }}
+                        style={{ background: 'transparent', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '11px' }}
+                      >✕</button>
+                    )}
                   </div>
-                ))}
-              </div>
-            </aside>
-          </div>
+                );
+              })}
+            </div>
+          </aside>
         )}
 
-        {/* ============================================================ */}
-        {/* VIEW 2: TRELLO KANBAN BOARD */}
-        {/* ============================================================ */}
-        {activeTab === 'trello' && (
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: '#0f172a', overflow: 'hidden' }} className="fade-in">
-            
-            {/* KANBAN CONTROLS BAR */}
+        {/* 2. MESSAGES PANE (WITH MESSAGE EDITING) */}
+        {(layoutMode === 'split' || layoutMode === 'messages') && (
+          <section style={{
+            flex: layoutMode === 'split' ? '1 1 50%' : '1 1 100%',
+            display: 'flex',
+            flexDirection: 'column',
+            backgroundColor: '#0f172a',
+            borderRight: layoutMode === 'split' ? '2px solid #334155' : 'none',
+            minWidth: '320px',
+            overflow: 'hidden'
+          }}>
+            {/* MESSAGES HEADER */}
             <div style={{
-              height: '56px',
-              borderBottom: '1px solid #1e293b',
+              height: '46px',
+              borderBottom: '1px solid #334155',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
-              padding: '0 24px',
-              flexShrink: 0
+              padding: '0 16px',
+              backgroundColor: '#1e293b'
             }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                <span style={{ fontSize: '16px', fontWeight: 800, color: '#f8fafc' }}>Sprint Kanban Board</span>
-                <span style={{ color: '#334155' }}>|</span>
-                
-                {/* FILTER BY PRIORITY */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#94a3b8' }}>
-                  <span>Filter:</span>
-                  <select
-                    value={cardFilterPriority}
-                    onChange={(e) => setCardFilterPriority(e.target.value)}
-                    style={{
-                      backgroundColor: '#1e293b',
-                      color: '#f8fafc',
-                      border: '1px solid #334155',
-                      padding: '5px 10px',
-                      borderRadius: '6px',
-                      fontSize: '12px',
-                      fontWeight: 600,
-                      outline: 'none'
-                    }}
-                  >
-                    <option value="all">All Priorities</option>
-                    <option value="urgent">🔴 Urgent</option>
-                    <option value="high">🟡 High</option>
-                    <option value="medium">🔵 Medium</option>
-                    <option value="low">🟢 Low</option>
-                  </select>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ color: '#818cf8', fontWeight: 800 }}>#</span>
+                <span style={{ fontWeight: 800, fontSize: '14px' }}>{activeChannel.name}</span>
+                <span style={{ color: '#64748b', fontSize: '12px' }}>— {activeChannel.description || 'Channel chat'}</span>
+              </div>
+              <span style={{ fontSize: '11px', color: '#94a3b8' }}>{messages.length} messages</span>
+            </div>
+
+            {/* MESSAGES STREAM */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              {messages.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '40px 0', color: '#64748b' }}>
+                  <p>No messages yet in #{activeChannel.name}.</p>
                 </div>
+              ) : (
+                messages.map(msg => {
+                  const isMine = currentUser && (msg.senderId === currentUser.id || currentUser.role === 'Admin');
+                  const isEditing = editingMessageId === msg.id;
+
+                  return (
+                    <div key={msg.id} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+                      <img
+                        src={msg.senderAvatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${msg.senderName}`}
+                        alt=""
+                        style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover' }}
+                      />
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px' }}>
+                          <span style={{ fontSize: '13px', fontWeight: 700, color: '#f8fafc' }}>{msg.senderName}</span>
+                          <span style={{ fontSize: '10px', color: '#64748b' }}>
+                            {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                          {msg.edited && (
+                            <span style={{ fontSize: '10px', color: '#94a3b8', fontStyle: 'italic' }}>(edited)</span>
+                          )}
+                        </div>
+
+                        {/* INLINE MESSAGE EDIT MODE */}
+                        {isEditing ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '4px' }}>
+                            <input
+                              type="text"
+                              value={editingMessageText}
+                              onChange={(e) => setEditingMessageText(e.target.value)}
+                              autoFocus
+                              style={{ padding: '6px 10px', borderRadius: '4px', backgroundColor: '#1e293b', border: '1px solid #6366f1', color: '#fff', fontSize: '13px' }}
+                            />
+                            <div style={{ display: 'flex', gap: '6px' }}>
+                              <button
+                                onClick={() => handleSaveEditedMessage(msg.id)}
+                                style={{ padding: '4px 10px', backgroundColor: '#6366f1', color: '#fff', border: 'none', borderRadius: '4px', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}
+                              >Save</button>
+                              <button
+                                onClick={() => setEditingMessageId(null)}
+                                style={{ padding: '4px 10px', backgroundColor: '#334155', color: '#cbd5e1', border: 'none', borderRadius: '4px', fontSize: '11px', cursor: 'pointer' }}
+                              >Cancel</button>
+                            </div>
+                          </div>
+                        ) : (
+                          <p style={{ fontSize: '13px', color: '#cbd5e1', lineHeight: 1.4 }}>{msg.text}</p>
+                        )}
+                      </div>
+
+                      {/* MESSAGE ACTIONS (EDIT & DELETE) */}
+                      {!isEditing && isMine && (
+                        <div style={{ display: 'flex', gap: '4px' }}>
+                          <button
+                            onClick={() => {
+                              setEditingMessageId(msg.id);
+                              setEditingMessageText(msg.text);
+                            }}
+                            title="Edit message"
+                            style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '12px' }}
+                          >✎</button>
+                          <button
+                            onClick={() => handleDeleteMessage(msg.id)}
+                            title="Delete message"
+                            style={{ background: 'transparent', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '11px' }}
+                          >✕</button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+              <div ref={messagesEndRef} />
+            </div>
+
+            {/* MESSAGE COMPOSER */}
+            <div style={{ padding: '12px 16px', borderTop: '1px solid #334155', backgroundColor: '#1e293b' }}>
+              <form onSubmit={handleSendMessage} style={{ display: 'flex', gap: '8px' }}>
+                <input
+                  type="text"
+                  placeholder={currentUser ? `Message #${activeChannel.name}...` : 'Please sign in to send messages'}
+                  disabled={!currentUser}
+                  value={newMessageText}
+                  onChange={(e) => setNewMessageText(e.target.value)}
+                  style={{
+                    flex: 1,
+                    backgroundColor: '#0f172a',
+                    border: '1px solid #334155',
+                    color: '#f8fafc',
+                    padding: '8px 12px',
+                    borderRadius: '6px',
+                    fontSize: '13px',
+                    outline: 'none'
+                  }}
+                />
+                <button
+                  type="submit"
+                  disabled={!currentUser}
+                  style={{
+                    padding: '8px 16px',
+                    backgroundColor: '#6366f1',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '6px',
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    cursor: currentUser ? 'pointer' : 'not-allowed',
+                    opacity: currentUser ? 1 : 0.6
+                  }}
+                >Send</button>
+              </form>
+            </div>
+          </section>
+        )}
+
+        {/* 3. BOARD PANE (WITH CUSTOM BOARD / COLUMN NAMES) */}
+        {(layoutMode === 'split' || layoutMode === 'board') && (
+          <section style={{
+            flex: layoutMode === 'split' ? '1 1 50%' : '1 1 100%',
+            display: 'flex',
+            flexDirection: 'column',
+            backgroundColor: '#0b1120',
+            minWidth: '340px',
+            overflow: 'hidden'
+          }}>
+            {/* BOARD HEADER & EDITABLE TITLE */}
+            <div style={{
+              height: '46px',
+              borderBottom: '1px solid #334155',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '0 16px',
+              backgroundColor: '#1e293b'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                {editingBoardTitle ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <input
+                      type="text"
+                      value={tempBoardTitle}
+                      onChange={(e) => setTempBoardTitle(e.target.value)}
+                      style={{ padding: '3px 8px', borderRadius: '4px', backgroundColor: '#0f172a', border: '1px solid #6366f1', color: '#fff', fontSize: '13px' }}
+                      autoFocus
+                    />
+                    <button onClick={handleSaveBoardTitle} style={{ padding: '3px 8px', backgroundColor: '#6366f1', color: '#fff', border: 'none', borderRadius: '4px', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}>Save</button>
+                    <button onClick={() => setEditingBoardTitle(false)} style={{ padding: '3px 8px', backgroundColor: '#334155', color: '#cbd5e1', border: 'none', borderRadius: '4px', fontSize: '11px', cursor: 'pointer' }}>✕</button>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ fontWeight: 800, fontSize: '14px' }}>📋 {boardConfig.title}</span>
+                    <button
+                      onClick={() => { setTempBoardTitle(boardConfig.title); setEditingBoardTitle(true); }}
+                      title="Rename Board"
+                      style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '12px' }}
+                    >✎</button>
+                  </div>
+                )}
+
+                <select
+                  value={cardFilterPriority}
+                  onChange={(e) => setCardFilterPriority(e.target.value)}
+                  style={{
+                    backgroundColor: '#0f172a',
+                    color: '#f8fafc',
+                    border: '1px solid #334155',
+                    padding: '3px 8px',
+                    borderRadius: '4px',
+                    fontSize: '11px',
+                    outline: 'none'
+                  }}
+                >
+                  <option value="all">All Priorities</option>
+                  <option value="urgent">🔴 Urgent</option>
+                  <option value="high">🟡 High</option>
+                  <option value="medium">🔵 Medium</option>
+                  <option value="low">🟢 Low</option>
+                </select>
               </div>
 
               <button
                 onClick={() => setShowCardModal(true)}
                 style={{
-                  padding: '8px 18px',
+                  padding: '5px 12px',
                   backgroundColor: '#0284c7',
-                  color: '#ffffff',
+                  color: '#fff',
                   border: 'none',
-                  borderRadius: '6px',
-                  fontSize: '13px',
+                  borderRadius: '4px',
+                  fontSize: '12px',
                   fontWeight: 700,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px'
+                  cursor: 'pointer'
                 }}
               >
                 + Add Card
               </button>
             </div>
 
-            {/* 4-COLUMN KANBAN BOARD */}
+            {/* KANBAN BOARD COLUMNS */}
             <div style={{
               flex: 1,
               display: 'grid',
-              gridTemplateColumns: 'repeat(4, 1fr)',
-              gap: '18px',
-              padding: '24px',
+              gridTemplateColumns: `repeat(${boardConfig.columns.length}, 1fr)`,
+              gap: '12px',
+              padding: '14px',
               overflowX: 'auto'
             }}>
-              {[
-                { id: 'todo', title: '📌 To Do', color: '#64748b' },
-                { id: 'in-progress', title: '⚡ In Progress', color: '#0284c7' },
-                { id: 'review', title: '🔍 Review', color: '#f59e0b' },
-                { id: 'done', title: '✅ Done', color: '#10b981' }
-              ].map(col => {
+              {boardConfig.columns.map(col => {
                 const colCards = filteredCards.filter(c => c.list === col.id);
+                const isEditingCol = editingColumnId === col.id;
+
                 return (
                   <div key={col.id} style={{
                     backgroundColor: '#1e293b',
-                    borderRadius: '12px',
+                    borderRadius: '8px',
                     border: '1px solid #334155',
                     display: 'flex',
                     flexDirection: 'column',
                     maxHeight: '100%',
                     overflow: 'hidden'
                   }}>
-                    {/* COLUMN HEADER */}
+                    {/* EDITABLE COLUMN HEADER */}
                     <div style={{
-                      padding: '14px 18px',
+                      padding: '10px 12px',
                       borderBottom: '1px solid #334155',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'space-between',
-                      fontWeight: 800,
-                      fontSize: '14px',
-                      color: '#f8fafc'
+                      fontWeight: 700,
+                      fontSize: '12px'
                     }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span>{col.title}</span>
-                        <span style={{
-                          fontSize: '11px',
-                          padding: '2px 8px',
-                          borderRadius: '12px',
-                          backgroundColor: '#334155',
-                          color: '#94a3b8'
-                        }}>{colCards.length}</span>
-                      </div>
+                      {isEditingCol ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', width: '100%' }}>
+                          <input
+                            type="text"
+                            value={tempColumnTitle}
+                            onChange={(e) => setTempColumnTitle(e.target.value)}
+                            style={{ flex: 1, padding: '2px 6px', borderRadius: '3px', backgroundColor: '#0f172a', border: '1px solid #6366f1', color: '#fff', fontSize: '11px' }}
+                            autoFocus
+                          />
+                          <button onClick={() => handleSaveColumnTitle(col.id)} style={{ padding: '2px 6px', backgroundColor: '#6366f1', color: '#fff', border: 'none', borderRadius: '3px', fontSize: '10px', cursor: 'pointer' }}>✓</button>
+                          <button onClick={() => setEditingColumnId(null)} style={{ padding: '2px 6px', backgroundColor: '#334155', color: '#cbd5e1', border: 'none', borderRadius: '3px', fontSize: '10px', cursor: 'pointer' }}>✕</button>
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span>{col.title}</span>
+                          <button
+                            onClick={() => { setTempColumnTitle(col.title); setEditingColumnId(col.id); }}
+                            title="Rename Column"
+                            style={{ background: 'transparent', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '11px' }}
+                          >✎</button>
+                        </div>
+                      )}
+                      
+                      {!isEditingCol && (
+                        <span style={{ backgroundColor: '#0f172a', padding: '1px 6px', borderRadius: '8px', fontSize: '10px', color: '#94a3b8' }}>
+                          {colCards.length}
+                        </span>
+                      )}
                     </div>
 
-                    {/* CARDS LIST */}
-                    <div style={{ flex: 1, overflowY: 'auto', padding: '12px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    {/* CARD LIST */}
+                    <div style={{ flex: 1, overflowY: 'auto', padding: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                       {colCards.map(card => {
-                        const pBadge = getPriorityBadge(card.priority);
+                        const pStyle = getPriorityStyle(card.priority);
                         return (
                           <div key={card.id} style={{
                             backgroundColor: '#0f172a',
                             border: '1px solid #334155',
-                            borderRadius: '10px',
-                            padding: '14px',
+                            borderRadius: '6px',
+                            padding: '10px',
                             display: 'flex',
                             flexDirection: 'column',
-                            gap: '10px',
-                            boxShadow: '0 2px 6px rgba(0,0,0,0.2)'
+                            gap: '6px'
                           }}>
-                            {/* TOP: PRIORITY BADGE & DELETE */}
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                               <span style={{
-                                fontSize: '10px',
+                                fontSize: '9px',
                                 textTransform: 'uppercase',
                                 fontWeight: 800,
-                                padding: '3px 8px',
+                                padding: '2px 6px',
                                 borderRadius: '4px',
-                                backgroundColor: pBadge.bg,
-                                border: `1px solid ${pBadge.border}`,
-                                color: pBadge.text,
-                                letterSpacing: '0.04em'
-                              }}>{card.priority}</span>
-
+                                backgroundColor: pStyle.bg,
+                                color: pStyle.text
+                              }}>
+                                {card.priority}
+                              </span>
                               <button
                                 onClick={() => handleDeleteCard(card.id)}
-                                style={{
-                                  background: 'transparent',
-                                  border: 'none',
-                                  color: '#64748b',
-                                  cursor: 'pointer',
-                                  fontSize: '12px'
-                                }}
+                                style={{ background: 'transparent', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '11px' }}
                               >✕</button>
                             </div>
 
-                            {/* CARD CONTENT */}
-                            <div>
-                              <h4 style={{ fontSize: '14px', fontWeight: 700, color: '#f8fafc', marginBottom: '4px', lineHeight: 1.3 }}>{card.title}</h4>
-                              {card.description && (
-                                <p style={{ fontSize: '12px', color: '#94a3b8', lineHeight: 1.4 }}>{card.description}</p>
-                              )}
-                            </div>
+                            <div style={{ fontSize: '13px', fontWeight: 700, color: '#f8fafc', lineHeight: 1.3 }}>{card.title}</div>
+                            {card.description && (
+                              <div style={{ fontSize: '11px', color: '#94a3b8', lineHeight: 1.3 }}>{card.description}</div>
+                            )}
 
-                            {/* ASSIGNEE & QUICK MOVE ACTIONS */}
                             <div style={{
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'space-between',
-                              paddingTop: '8px',
+                              paddingTop: '6px',
                               borderTop: '1px solid #1e293b',
-                              fontSize: '12px'
+                              fontSize: '11px'
                             }}>
-                              <span style={{ color: '#64748b', fontWeight: 600 }}>👤 {card.assigneeName || 'Unassigned'}</span>
-
-                              {/* MOVE BUTTONS */}
-                              <div style={{ display: 'flex', gap: '4px' }}>
-                                {col.id !== 'todo' && (
+                              <span style={{ color: '#64748b' }}>👤 {card.assigneeName || 'Unassigned'}</span>
+                              <div style={{ display: 'flex', gap: '3px' }}>
+                                {col.id !== boardConfig.columns[0]?.id && (
                                   <button
                                     onClick={() => handleMoveCard(card.id, card.list, 'left')}
-                                    title="Move Left"
-                                    style={{
-                                      padding: '3px 8px',
-                                      backgroundColor: '#334155',
-                                      color: '#f8fafc',
-                                      border: 'none',
-                                      borderRadius: '4px',
-                                      cursor: 'pointer',
-                                      fontSize: '11px',
-                                      fontWeight: 700
-                                    }}
+                                    style={{ padding: '2px 6px', backgroundColor: '#334155', color: '#f8fafc', border: 'none', borderRadius: '3px', cursor: 'pointer', fontSize: '10px' }}
                                   >◀</button>
                                 )}
-                                {col.id !== 'done' && (
+                                {col.id !== boardConfig.columns[boardConfig.columns.length - 1]?.id && (
                                   <button
                                     onClick={() => handleMoveCard(card.id, card.list, 'right')}
-                                    title="Move Right"
-                                    style={{
-                                      padding: '3px 8px',
-                                      backgroundColor: '#334155',
-                                      color: '#f8fafc',
-                                      border: 'none',
-                                      borderRadius: '4px',
-                                      cursor: 'pointer',
-                                      fontSize: '11px',
-                                      fontWeight: 700
-                                    }}
+                                    style={{ padding: '2px 6px', backgroundColor: '#334155', color: '#f8fafc', border: 'none', borderRadius: '3px', cursor: 'pointer', fontSize: '10px' }}
                                   >▶</button>
                                 )}
                               </div>
@@ -983,225 +1019,338 @@ export default function App() {
                 );
               })}
             </div>
-          </div>
-        )}
-
-        {/* ============================================================ */}
-        {/* VIEW 3: SYSTEM DIAGNOSTICS */}
-        {/* ============================================================ */}
-        {activeTab === 'stats' && (
-          <div style={{ flex: 1, backgroundColor: '#0f172a', padding: '32px', overflowY: 'auto' }} className="fade-in">
-            <div style={{ maxWidth: '900px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '24px' }}>
-              
-              <div>
-                <h2 style={{ fontSize: '24px', fontWeight: 800, color: '#f8fafc', marginBottom: '6px' }}>System Diagnostics & Platform Metrics</h2>
-                <p style={{ fontSize: '14px', color: '#94a3b8' }}>Real-time telemetry and resource breakdown for Rosetta.</p>
-              </div>
-
-              {/* STATS METRIC GRID */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
-                <div style={{ backgroundColor: '#1e293b', padding: '20px', borderRadius: '12px', border: '1px solid #334155' }}>
-                  <div style={{ fontSize: '12px', color: '#64748b', textTransform: 'uppercase', fontWeight: 800 }}>Total Channels</div>
-                  <div style={{ fontSize: '28px', fontWeight: 800, color: '#5865f2', marginTop: '8px' }}>{stats?.totalChannels || 0}</div>
-                </div>
-                <div style={{ backgroundColor: '#1e293b', padding: '20px', borderRadius: '12px', border: '1px solid #334155' }}>
-                  <div style={{ fontSize: '12px', color: '#64748b', textTransform: 'uppercase', fontWeight: 800 }}>Active Members</div>
-                  <div style={{ fontSize: '28px', fontWeight: 800, color: '#10b981', marginTop: '8px' }}>{stats?.totalMembers || 0}</div>
-                </div>
-                <div style={{ backgroundColor: '#1e293b', padding: '20px', borderRadius: '12px', border: '1px solid #334155' }}>
-                  <div style={{ fontSize: '12px', color: '#64748b', textTransform: 'uppercase', fontWeight: 800 }}>Total Messages</div>
-                  <div style={{ fontSize: '28px', fontWeight: 800, color: '#f59e0b', marginTop: '8px' }}>{stats?.totalMessages || 0}</div>
-                </div>
-                <div style={{ backgroundColor: '#1e293b', padding: '20px', borderRadius: '12px', border: '1px solid #334155' }}>
-                  <div style={{ fontSize: '12px', color: '#64748b', textTransform: 'uppercase', fontWeight: 800 }}>Kanban Cards</div>
-                  <div style={{ fontSize: '28px', fontWeight: 800, color: '#0284c7', marginTop: '8px' }}>{stats?.totalCards || 0}</div>
-                </div>
-              </div>
-
-              {/* ARCHITECTURE SUMMARY */}
-              <div style={{ backgroundColor: '#1e293b', padding: '24px', borderRadius: '12px', border: '1px solid #334155' }}>
-                <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#f8fafc', marginBottom: '12px' }}>⚙️ Infrastructure & Specifications</h3>
-                <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '14px', color: '#94a3b8' }}>
-                  <li>🚀 <strong>Hosting Node:</strong> Azure Cloud VPS (`40.83.100.54`)</li>
-                  <li>📦 <strong>Container Registry:</strong> GitHub Packages (`ghcr.io/mdtha-x/rosetta`)</li>
-                  <li>⚡ <strong>Response Time:</strong> Sub-3ms on primary read/write endpoints</li>
-                  <li>🛡️ <strong>Quality Gates:</strong> 100 Postman automated test assertions ready for regression audits</li>
-                </ul>
-              </div>
-
-            </div>
-          </div>
+          </section>
         )}
 
       </div>
 
       {/* ============================================================ */}
-      {/* MODALS */}
+      {/* AUTH MODAL (WITH EMAIL INPUT) */}
       {/* ============================================================ */}
+      {showAuthModal && (
+        <div style={{
+          position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100
+        }}>
+          <div style={{ backgroundColor: '#1e293b', borderRadius: '12px', width: '400px', padding: '24px', border: '1px solid #334155' }}>
+            <div style={{ display: 'flex', borderBottom: '1px solid #334155', marginBottom: '16px' }}>
+              <button
+                onClick={() => { setAuthTab('login'); setAuthError(''); }}
+                style={{
+                  flex: 1, padding: '10px', background: 'transparent', border: 'none',
+                  borderBottom: authTab === 'login' ? '2px solid #6366f1' : 'none',
+                  color: authTab === 'login' ? '#ffffff' : '#94a3b8',
+                  fontWeight: 700, cursor: 'pointer'
+                }}
+              >Sign In</button>
+              <button
+                onClick={() => { setAuthTab('register'); setAuthError(''); }}
+                style={{
+                  flex: 1, padding: '10px', background: 'transparent', border: 'none',
+                  borderBottom: authTab === 'register' ? '2px solid #6366f1' : 'none',
+                  color: authTab === 'register' ? '#ffffff' : '#94a3b8',
+                  fontWeight: 700, cursor: 'pointer'
+                }}
+              >Register</button>
+            </div>
+
+            {authError && (
+              <div style={{ backgroundColor: 'rgba(239, 68, 68, 0.2)', border: '1px solid #ef4444', color: '#fca5a5', padding: '8px', borderRadius: '6px', fontSize: '12px', marginBottom: '12px' }}>
+                {authError}
+              </div>
+            )}
+
+            <form onSubmit={handleAuthSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {authTab === 'register' && (
+                <>
+                  <div>
+                    <label style={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', display: 'block', marginBottom: '4px' }}>FULL NAME</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Tanjim Hossen"
+                      value={authFullName}
+                      onChange={(e) => setAuthFullName(e.target.value)}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', backgroundColor: '#0f172a', border: '1px solid #334155', color: '#f8fafc' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', display: 'block', marginBottom: '4px' }}>EMAIL ADDRESS</label>
+                    <input
+                      type="email"
+                      required
+                      placeholder="e.g. tanjim@example.com"
+                      value={authEmail}
+                      onChange={(e) => setAuthEmail(e.target.value)}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', backgroundColor: '#0f172a', border: '1px solid #334155', color: '#f8fafc' }}
+                    />
+                  </div>
+                </>
+              )}
+
+              <div>
+                <label style={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', display: 'block', marginBottom: '4px' }}>
+                  {authTab === 'login' ? 'USERNAME OR EMAIL' : 'USERNAME'}
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder={authTab === 'login' ? 'Username or email...' : 'e.g. tanjim'}
+                  value={authUsername}
+                  onChange={(e) => setAuthUsername(e.target.value)}
+                  style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', backgroundColor: '#0f172a', border: '1px solid #334155', color: '#f8fafc' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', display: 'block', marginBottom: '4px' }}>PASSWORD</label>
+                <input
+                  type="password"
+                  required
+                  placeholder="••••••••"
+                  value={authPassword}
+                  onChange={(e) => setAuthPassword(e.target.value)}
+                  style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', backgroundColor: '#0f172a', border: '1px solid #334155', color: '#f8fafc' }}
+                />
+              </div>
+
+              {authTab === 'register' && (
+                <div>
+                  <label style={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', display: 'block', marginBottom: '4px' }}>ROLE</label>
+                  <select
+                    value={authRole}
+                    onChange={(e) => setAuthRole(e.target.value)}
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', backgroundColor: '#0f172a', border: '1px solid #334155', color: '#f8fafc' }}
+                  >
+                    <option value="Admin">Admin</option>
+                    <option value="Lead Developer">Lead Developer</option>
+                    <option value="Product Designer">Product Designer</option>
+                    <option value="QA Engineer">QA Engineer</option>
+                    <option value="Member">Member</option>
+                  </select>
+                </div>
+              )}
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '10px' }}>
+                <button type="button" onClick={() => setShowAuthModal(false)} style={{ padding: '8px 12px', background: 'transparent', color: '#94a3b8', border: 'none', cursor: 'pointer' }}>Cancel</button>
+                <button type="submit" style={{ padding: '8px 16px', backgroundColor: '#6366f1', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 700, cursor: 'pointer' }}>
+                  {authTab === 'login' ? 'Sign In' : 'Create Account'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================ */}
+      {/* "KNOWN" CONTACTS & USER DIRECTORY MODAL */}
+      {/* ============================================================ */}
+      {showNetworkModal && (
+        <div style={{
+          position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100
+        }}>
+          <div style={{ backgroundColor: '#1e293b', borderRadius: '12px', width: '560px', maxHeight: '80vh', display: 'flex', flexDirection: 'column', border: '1px solid #334155', overflow: 'hidden' }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid #334155', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <h3 style={{ fontSize: '16px', fontWeight: 800 }}>👥 Known Contacts & User Network</h3>
+                <p style={{ fontSize: '12px', color: '#94a3b8' }}>Connect with team members and manage connection requests</p>
+              </div>
+              <button onClick={() => setShowNetworkModal(false)} style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '16px' }}>✕</button>
+            </div>
+
+            <div style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              {connections.pendingIncoming?.length > 0 && (
+                <div>
+                  <h4 style={{ fontSize: '13px', fontWeight: 800, color: '#f59e0b', marginBottom: '10px', textTransform: 'uppercase' }}>
+                    📬 Pending Requests for You ({connections.pendingIncoming.length})
+                  </h4>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {connections.pendingIncoming.map(req => (
+                      <div key={req.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px', backgroundColor: '#0f172a', borderRadius: '8px', border: '1px solid #334155' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <img src={req.sender?.avatar} alt="" style={{ width: '32px', height: '32px', borderRadius: '50%' }} />
+                          <div>
+                            <div style={{ fontSize: '13px', fontWeight: 700 }}>{req.sender?.name}</div>
+                            <div style={{ fontSize: '11px', color: '#94a3b8' }}>{req.sender?.email || `@${req.sender?.username}`} ({req.sender?.role})</div>
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: '6px' }}>
+                          <button
+                            onClick={() => handleUpdateConnection(req.id, 'accepted')}
+                            style={{ padding: '5px 10px', backgroundColor: '#10b981', color: '#fff', border: 'none', borderRadius: '4px', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}
+                          >Accept</button>
+                          <button
+                            onClick={() => handleUpdateConnection(req.id, 'rejected')}
+                            style={{ padding: '5px 10px', backgroundColor: '#334155', color: '#cbd5e1', border: 'none', borderRadius: '4px', fontSize: '11px', cursor: 'pointer' }}
+                          >Decline</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <h4 style={{ fontSize: '13px', fontWeight: 800, color: '#94a3b8', marginBottom: '10px', textTransform: 'uppercase' }}>
+                  ⭐ Your Known Contacts ({connections.known?.length || 0})
+                </h4>
+                {connections.known?.length === 0 ? (
+                  <p style={{ fontSize: '12px', color: '#64748b' }}>You have no confirmed known contacts yet. Send requests below!</p>
+                ) : (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                    {connections.known.map(user => (
+                      <div key={user.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px', backgroundColor: '#0f172a', borderRadius: '8px', border: '1px solid #334155' }}>
+                        <img src={user.avatar} alt="" style={{ width: '32px', height: '32px', borderRadius: '50%' }} />
+                        <div style={{ overflow: 'hidden' }}>
+                          <div style={{ fontSize: '13px', fontWeight: 700, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>{user.name}</div>
+                          <div style={{ fontSize: '11px', color: '#94a3b8' }}>{user.email || `@${user.username}`}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <h4 style={{ fontSize: '13px', fontWeight: 800, color: '#94a3b8', marginBottom: '10px', textTransform: 'uppercase' }}>
+                  🔍 Find & Add Registered Users
+                </h4>
+                <input
+                  type="text"
+                  placeholder="Search by name, email, or username..."
+                  value={userSearchQuery}
+                  onChange={(e) => setUserSearchQuery(e.target.value)}
+                  style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', backgroundColor: '#0f172a', border: '1px solid #334155', color: '#f8fafc', fontSize: '13px', marginBottom: '10px' }}
+                />
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '200px', overflowY: 'auto' }}>
+                  {allUsers
+                    .filter(u => u.id !== currentUser?.id)
+                    .filter(u => !userSearchQuery || 
+                      u.name.toLowerCase().includes(userSearchQuery.toLowerCase()) || 
+                      u.username.toLowerCase().includes(userSearchQuery.toLowerCase()) ||
+                      (u.email && u.email.toLowerCase().includes(userSearchQuery.toLowerCase()))
+                    )
+                    .map(user => {
+                      const isKnown = connections.known?.some(k => k.id === user.id);
+                      const isPendingOut = connections.pendingOutgoing?.some(p => p.receiverId === user.id);
+
+                      return (
+                        <div key={user.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 10px', backgroundColor: '#0f172a', borderRadius: '6px', border: '1px solid #334155' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <img src={user.avatar} alt="" style={{ width: '28px', height: '28px', borderRadius: '50%' }} />
+                            <div>
+                              <div style={{ fontSize: '12px', fontWeight: 700 }}>{user.name}</div>
+                              <div style={{ fontSize: '10px', color: '#94a3b8' }}>{user.email || `@${user.username}`} ({user.role})</div>
+                            </div>
+                          </div>
+
+                          {isKnown ? (
+                            <span style={{ fontSize: '11px', color: '#10b981', fontWeight: 700 }}>✓ Known</span>
+                          ) : isPendingOut ? (
+                            <span style={{ fontSize: '11px', color: '#f59e0b', fontWeight: 700 }}>⏳ Request Sent</span>
+                          ) : (
+                            <button
+                              onClick={() => handleSendKnownRequest(user.id)}
+                              style={{ padding: '4px 10px', backgroundColor: '#6366f1', color: '#fff', border: 'none', borderRadius: '4px', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}
+                            >+ Add as Known</button>
+                          )}
+                        </div>
+                      );
+                    })}
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* CREATE CHANNEL MODAL */}
       {showChannelModal && (
-        <div style={{
-          position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100
-        }}>
-          <div style={{ backgroundColor: '#2b2d31', borderRadius: '12px', width: '420px', padding: '24px', border: '1px solid #1f2023', boxShadow: '0 8px 32px rgba(0,0,0,0.5)' }}>
-            <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#f2f3f5', marginBottom: '16px' }}>Create Text Channel</h3>
-            <form onSubmit={handleCreateChannel} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <div>
-                <label style={{ fontSize: '12px', fontWeight: 700, color: '#949ba4', display: 'block', marginBottom: '6px' }}>CHANNEL NAME</label>
-                <input
-                  type="text"
-                  placeholder="e.g. backend-sprint"
-                  value={newChannelName}
-                  onChange={(e) => setNewChannelName(e.target.value)}
-                  style={{ width: '100%', padding: '10px', borderRadius: '6px', backgroundColor: '#1e1f22', border: '1px solid #1f2023', color: '#f2f3f5', outline: 'none' }}
-                />
-              </div>
-              <div>
-                <label style={{ fontSize: '12px', fontWeight: 700, color: '#949ba4', display: 'block', marginBottom: '6px' }}>DESCRIPTION (OPTIONAL)</label>
-                <input
-                  type="text"
-                  placeholder="What is this channel for?"
-                  value={newChannelDesc}
-                  onChange={(e) => setNewChannelDesc(e.target.value)}
-                  style={{ width: '100%', padding: '10px', borderRadius: '6px', backgroundColor: '#1e1f22', border: '1px solid #1f2023', color: '#f2f3f5', outline: 'none' }}
-                />
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
-                <button type="button" onClick={() => setShowChannelModal(false)} style={{ padding: '8px 16px', background: 'transparent', color: '#949ba4', border: 'none', cursor: 'pointer', fontWeight: 600 }}>Cancel</button>
-                <button type="submit" style={{ padding: '8px 18px', backgroundColor: '#5865f2', color: '#ffffff', border: 'none', borderRadius: '6px', fontWeight: 700, cursor: 'pointer' }}>Create Channel</button>
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
+          <div style={{ backgroundColor: '#1e293b', borderRadius: '12px', width: '380px', padding: '20px', border: '1px solid #334155' }}>
+            <h3 style={{ fontSize: '16px', fontWeight: 800, marginBottom: '14px' }}>Create Channel</h3>
+            <form onSubmit={handleCreateChannel} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <input
+                type="text"
+                placeholder="Channel name (e.g. backend-sprint)"
+                value={newChannelName}
+                onChange={(e) => setNewChannelName(e.target.value)}
+                style={{ padding: '8px 10px', borderRadius: '6px', backgroundColor: '#0f172a', border: '1px solid #334155', color: '#f8fafc' }}
+              />
+              <input
+                type="text"
+                placeholder="Description (optional)"
+                value={newChannelDesc}
+                onChange={(e) => setNewChannelDesc(e.target.value)}
+                style={{ padding: '8px 10px', borderRadius: '6px', backgroundColor: '#0f172a', border: '1px solid #334155', color: '#f8fafc' }}
+              />
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                <button type="button" onClick={() => setShowChannelModal(false)} style={{ padding: '6px 12px', background: 'transparent', color: '#94a3b8', border: 'none', cursor: 'pointer' }}>Cancel</button>
+                <button type="submit" style={{ padding: '6px 14px', backgroundColor: '#6366f1', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 700, cursor: 'pointer' }}>Create</button>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* CREATE MEMBER MODAL */}
-      {showMemberModal && (
-        <div style={{
-          position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100
-        }}>
-          <div style={{ backgroundColor: '#2b2d31', borderRadius: '12px', width: '420px', padding: '24px', border: '1px solid #1f2023', boxShadow: '0 8px 32px rgba(0,0,0,0.5)' }}>
-            <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#f2f3f5', marginBottom: '16px' }}>Add Team Member</h3>
-            <form onSubmit={handleCreateMember} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <div>
-                <label style={{ fontSize: '12px', fontWeight: 700, color: '#949ba4', display: 'block', marginBottom: '6px' }}>FULL NAME</label>
-                <input
-                  type="text"
-                  placeholder="e.g. David Kim"
-                  value={newMemberName}
-                  onChange={(e) => setNewMemberName(e.target.value)}
-                  style={{ width: '100%', padding: '10px', borderRadius: '6px', backgroundColor: '#1e1f22', border: '1px solid #1f2023', color: '#f2f3f5', outline: 'none' }}
-                />
-              </div>
-              <div>
-                <label style={{ fontSize: '12px', fontWeight: 700, color: '#949ba4', display: 'block', marginBottom: '6px' }}>USERNAME</label>
-                <input
-                  type="text"
-                  placeholder="e.g. davidk"
-                  value={newMemberUsername}
-                  onChange={(e) => setNewMemberUsername(e.target.value)}
-                  style={{ width: '100%', padding: '10px', borderRadius: '6px', backgroundColor: '#1e1f22', border: '1px solid #1f2023', color: '#f2f3f5', outline: 'none' }}
-                />
-              </div>
-              <div>
-                <label style={{ fontSize: '12px', fontWeight: 700, color: '#949ba4', display: 'block', marginBottom: '6px' }}>ROLE</label>
-                <select
-                  value={newMemberRole}
-                  onChange={(e) => setNewMemberRole(e.target.value)}
-                  style={{ width: '100%', padding: '10px', borderRadius: '6px', backgroundColor: '#1e1f22', border: '1px solid #1f2023', color: '#f2f3f5', outline: 'none' }}
-                >
-                  <option value="Admin">Admin</option>
-                  <option value="Lead Developer">Lead Developer</option>
-                  <option value="Product Designer">Product Designer</option>
-                  <option value="QA Engineer">QA Engineer</option>
-                  <option value="Member">Member</option>
-                </select>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
-                <button type="button" onClick={() => setShowMemberModal(false)} style={{ padding: '8px 16px', background: 'transparent', color: '#949ba4', border: 'none', cursor: 'pointer', fontWeight: 600 }}>Cancel</button>
-                <button type="submit" style={{ padding: '8px 18px', backgroundColor: '#23a55a', color: '#ffffff', border: 'none', borderRadius: '6px', fontWeight: 700, cursor: 'pointer' }}>Add Member</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* CREATE KANBAN CARD MODAL */}
+      {/* CREATE CARD MODAL */}
       {showCardModal && (
-        <div style={{
-          position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100
-        }}>
-          <div style={{ backgroundColor: '#1e293b', borderRadius: '12px', width: '460px', padding: '24px', border: '1px solid #334155', boxShadow: '0 8px 32px rgba(0,0,0,0.5)' }}>
-            <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#f8fafc', marginBottom: '16px' }}>Create Kanban Task Card</h3>
-            <form onSubmit={handleCreateCard} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <div>
-                <label style={{ fontSize: '12px', fontWeight: 700, color: '#94a3b8', display: 'block', marginBottom: '6px' }}>CARD TITLE</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Implement Postman automated assertions"
-                  value={newCardTitle}
-                  onChange={(e) => setNewCardTitle(e.target.value)}
-                  style={{ width: '100%', padding: '10px', borderRadius: '6px', backgroundColor: '#0f172a', border: '1px solid #334155', color: '#f8fafc', outline: 'none' }}
-                />
-              </div>
-              <div>
-                <label style={{ fontSize: '12px', fontWeight: 700, color: '#94a3b8', display: 'block', marginBottom: '6px' }}>DESCRIPTION</label>
-                <textarea
-                  placeholder="Add details or notes..."
-                  value={newCardDesc}
-                  onChange={(e) => setNewCardDesc(e.target.value)}
-                  rows={3}
-                  style={{ width: '100%', padding: '10px', borderRadius: '6px', backgroundColor: '#0f172a', border: '1px solid #334155', color: '#f8fafc', resize: 'vertical', outline: 'none' }}
-                />
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                <div>
-                  <label style={{ fontSize: '12px', fontWeight: 700, color: '#94a3b8', display: 'block', marginBottom: '6px' }}>COLUMN</label>
-                  <select
-                    value={newCardList}
-                    onChange={(e) => setNewCardList(e.target.value)}
-                    style={{ width: '100%', padding: '10px', borderRadius: '6px', backgroundColor: '#0f172a', border: '1px solid #334155', color: '#f8fafc', outline: 'none' }}
-                  >
-                    <option value="todo">📌 To Do</option>
-                    <option value="in-progress">⚡ In Progress</option>
-                    <option value="review">🔍 Review</option>
-                    <option value="done">✅ Done</option>
-                  </select>
-                </div>
-                <div>
-                  <label style={{ fontSize: '12px', fontWeight: 700, color: '#94a3b8', display: 'block', marginBottom: '6px' }}>PRIORITY</label>
-                  <select
-                    value={newCardPriority}
-                    onChange={(e) => setNewCardPriority(e.target.value)}
-                    style={{ width: '100%', padding: '10px', borderRadius: '6px', backgroundColor: '#0f172a', border: '1px solid #334155', color: '#f8fafc', outline: 'none' }}
-                  >
-                    <option value="urgent">🔴 Urgent</option>
-                    <option value="high">🟡 High</option>
-                    <option value="medium">🔵 Medium</option>
-                    <option value="low">🟢 Low</option>
-                  </select>
-                </div>
-              </div>
-              <div>
-                <label style={{ fontSize: '12px', fontWeight: 700, color: '#94a3b8', display: 'block', marginBottom: '6px' }}>ASSIGN TO</label>
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
+          <div style={{ backgroundColor: '#1e293b', borderRadius: '12px', width: '420px', padding: '20px', border: '1px solid #334155' }}>
+            <h3 style={{ fontSize: '16px', fontWeight: 800, marginBottom: '14px' }}>Create Board Task Card</h3>
+            <form onSubmit={handleCreateCard} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <input
+                type="text"
+                required
+                placeholder="Card title..."
+                value={newCardTitle}
+                onChange={(e) => setNewCardTitle(e.target.value)}
+                style={{ padding: '8px 10px', borderRadius: '6px', backgroundColor: '#0f172a', border: '1px solid #334155', color: '#f8fafc' }}
+              />
+              <textarea
+                placeholder="Description or notes..."
+                value={newCardDesc}
+                onChange={(e) => setNewCardDesc(e.target.value)}
+                rows={3}
+                style={{ padding: '8px 10px', borderRadius: '6px', backgroundColor: '#0f172a', border: '1px solid #334155', color: '#f8fafc', resize: 'vertical' }}
+              />
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                 <select
-                  value={newCardAssignee}
-                  onChange={(e) => setNewCardAssignee(e.target.value)}
-                  style={{ width: '100%', padding: '10px', borderRadius: '6px', backgroundColor: '#0f172a', border: '1px solid #334155', color: '#f8fafc', outline: 'none' }}
+                  value={newCardList}
+                  onChange={(e) => setNewCardList(e.target.value)}
+                  style={{ padding: '8px 10px', borderRadius: '6px', backgroundColor: '#0f172a', border: '1px solid #334155', color: '#f8fafc' }}
                 >
-                  <option value="">Unassigned</option>
-                  {members.map(m => (
-                    <option key={m.id} value={m.id}>{m.name} ({m.role})</option>
+                  {boardConfig.columns.map(c => (
+                    <option key={c.id} value={c.id}>{c.title}</option>
                   ))}
                 </select>
+                <select
+                  value={newCardPriority}
+                  onChange={(e) => setNewCardPriority(e.target.value)}
+                  style={{ padding: '8px 10px', borderRadius: '6px', backgroundColor: '#0f172a', border: '1px solid #334155', color: '#f8fafc' }}
+                >
+                  <option value="urgent">🔴 Urgent</option>
+                  <option value="high">🟡 High</option>
+                  <option value="medium">🔵 Medium</option>
+                  <option value="low">🟢 Low</option>
+                </select>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
-                <button type="button" onClick={() => setShowCardModal(false)} style={{ padding: '8px 16px', background: 'transparent', color: '#94a3b8', border: 'none', cursor: 'pointer', fontWeight: 600 }}>Cancel</button>
-                <button type="submit" style={{ padding: '8px 18px', backgroundColor: '#0284c7', color: '#ffffff', border: 'none', borderRadius: '6px', fontWeight: 700, cursor: 'pointer' }}>Create Card</button>
+              <select
+                value={newCardAssignee}
+                onChange={(e) => setNewCardAssignee(e.target.value)}
+                style={{ padding: '8px 10px', borderRadius: '6px', backgroundColor: '#0f172a', border: '1px solid #334155', color: '#f8fafc' }}
+              >
+                <option value="">Assign To...</option>
+                {allUsers.map(u => (
+                  <option key={u.id} value={u.id}>{u.name} ({u.email || `@${u.username}`})</option>
+                ))}
+              </select>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                <button type="button" onClick={() => setShowCardModal(false)} style={{ padding: '6px 12px', background: 'transparent', color: '#94a3b8', border: 'none', cursor: 'pointer' }}>Cancel</button>
+                <button type="submit" style={{ padding: '6px 14px', backgroundColor: '#0284c7', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 700, cursor: 'pointer' }}>Add Card</button>
               </div>
             </form>
           </div>
