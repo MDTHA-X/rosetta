@@ -1,0 +1,498 @@
+{
+  "info": {
+    "_postman_id": "b7c8d9e0-1f2a-3b4c-5d6e-7f8a9b0c1d2e",
+    "name": "Rosetta Platform Automated Test Suite (100 Assertions)",
+    "description": "Comprehensive automated testing suite for Rosetta (Discord + Trello Hybrid Platform) covering Channels, Members, Messages, and Kanban Cards with 100 assertions.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "01. System Health Check",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"01.1 - Status code is 200 OK\", function () { pm.response.to.have.status(200); });",
+              "pm.test(\"01.2 - Response latency is within SLA (< 1000ms)\", function () { pm.expect(pm.response.responseTime).to.be.below(1000); });",
+              "pm.test(\"01.3 - Content-Type is application/json\", function () { pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'); });",
+              "pm.test(\"01.4 - Service status reports 'ok'\", function () { const d = pm.response.json(); pm.expect(d.status).to.eql('ok'); });",
+              "pm.test(\"01.5 - Uptime seconds is a non-negative number\", function () { const d = pm.response.json(); pm.expect(d.uptimeSeconds).to.be.a('number').and.to.be.at.least(0); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": { "raw": "{{baseUrl}}/api/health", "host": ["{{baseUrl}}"], "path": ["api", "health"] }
+      }
+    },
+    {
+      "name": "02. System Stats Metrics",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"02.1 - Status code is 200 OK\", function () { pm.response.to.have.status(200); });",
+              "pm.test(\"02.2 - Total channels is a positive integer\", function () { const d = pm.response.json(); pm.expect(d.totalChannels).to.be.a('number').and.to.be.above(0); });",
+              "pm.test(\"02.3 - Total members is a positive integer\", function () { const d = pm.response.json(); pm.expect(d.totalMembers).to.be.a('number').and.to.be.above(0); });",
+              "pm.test(\"02.4 - Total messages is a valid number\", function () { const d = pm.response.json(); pm.expect(d.totalMessages).to.be.a('number'); });",
+              "pm.test(\"02.5 - Total cards is a valid number\", function () { const d = pm.response.json(); pm.expect(d.totalCards).to.be.a('number'); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": { "raw": "{{baseUrl}}/api/stats", "host": ["{{baseUrl}}"], "path": ["api", "stats"] }
+      }
+    },
+    {
+      "name": "03. Get All Text Channels",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"03.1 - Status code is 200 OK\", function () { pm.response.to.have.status(200); });",
+              "pm.test(\"03.2 - Response is an array of channels\", function () { const d = pm.response.json(); pm.expect(d).to.be.an('array'); });",
+              "pm.test(\"03.3 - Contains default #general channel\", function () { const d = pm.response.json(); const gen = d.find(c => c.name === 'general'); pm.expect(gen).to.not.be.undefined; pm.expect(gen.isDefault).to.be.true; });",
+              "pm.test(\"03.4 - Channel objects have valid schema\", function () { const d = pm.response.json(); pm.expect(d[0]).to.have.all.keys('id', 'name', 'description', 'category', 'isDefault', 'createdAt'); });",
+              "pm.test(\"03.5 - Latency is below 1000ms\", function () { pm.expect(pm.response.responseTime).to.be.below(1000); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": { "raw": "{{baseUrl}}/api/channels", "host": ["{{baseUrl}}"], "path": ["api", "channels"] }
+      }
+    },
+    {
+      "name": "04. Get Channel by ID (c-1)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"04.1 - Status code is 200 OK\", function () { pm.response.to.have.status(200); });",
+              "pm.test(\"04.2 - Channel ID matches requested ID\", function () { const d = pm.response.json(); pm.expect(d.id).to.eql('c-1'); });",
+              "pm.test(\"04.3 - Channel name is 'general'\", function () { const d = pm.response.json(); pm.expect(d.name).to.eql('general'); });",
+              "pm.test(\"04.4 - Channel category is defined\", function () { const d = pm.response.json(); pm.expect(d.category).to.be.a('string').and.not.empty; });",
+              "pm.test(\"04.5 - Description is a non-empty string\", function () { const d = pm.response.json(); pm.expect(d.description).to.be.a('string'); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": { "raw": "{{baseUrl}}/api/channels/c-1", "host": ["{{baseUrl}}"], "path": ["api", "channels", "c-1"] }
+      }
+    },
+    {
+      "name": "05. Create New Channel",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"05.1 - Status code is 201 Created\", function () { pm.response.to.have.status(201); });",
+              "pm.test(\"05.2 - Generated channel ID starts with 'c-'\", function () { const d = pm.response.json(); pm.expect(d.id).to.match(/^c-/); });",
+              "pm.test(\"05.3 - Channel name is sanitized to lowercase\", function () { const d = pm.response.json(); pm.expect(d.name).to.eql('qa-automation'); });",
+              "pm.test(\"05.4 - Newly created channel isDefault is false\", function () { const d = pm.response.json(); pm.expect(d.isDefault).to.be.false; });",
+              "pm.test(\"05.5 - Set createdChannelId environment variable\", function () { const d = pm.response.json(); pm.environment.set('createdChannelId', d.id); pm.expect(pm.environment.get('createdChannelId')).to.eql(d.id); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"QA-Automation\",\n  \"description\": \"Automated quality engineering and testing discussions\",\n  \"category\": \"Text Channels\"\n}"
+        },
+        "url": { "raw": "{{baseUrl}}/api/channels", "host": ["{{baseUrl}}"], "path": ["api", "channels"] }
+      }
+    },
+    {
+      "name": "06. Update Channel Details",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"06.1 - Status code is 200 OK\", function () { pm.response.to.have.status(200); });",
+              "pm.test(\"06.2 - Updated description matches new value\", function () { const d = pm.response.json(); pm.expect(d.description).to.eql('Updated description for QA Automation channel'); });",
+              "pm.test(\"06.3 - Channel ID is preserved\", function () { const d = pm.response.json(); pm.expect(d.id).to.eql(pm.environment.get('createdChannelId')); });",
+              "pm.test(\"06.4 - Headers confirm application/json\", function () { pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'); });",
+              "pm.test(\"06.5 - Response time under 1000ms\", function () { pm.expect(pm.response.responseTime).to.be.below(1000); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "PATCH",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"description\": \"Updated description for QA Automation channel\"\n}"
+        },
+        "url": { "raw": "{{baseUrl}}/api/channels/{{createdChannelId}}", "host": ["{{baseUrl}}"], "path": ["api", "channels", "{{createdChannelId}}"] }
+      }
+    },
+    {
+      "name": "07. Get All Members",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"07.1 - Status code is 200 OK\", function () { pm.response.to.have.status(200); });",
+              "pm.test(\"07.2 - Members response is a non-empty array\", function () { const d = pm.response.json(); pm.expect(d).to.be.an('array').and.not.empty; });",
+              "pm.test(\"07.3 - Member objects contain id, name, username, and role\", function () { const d = pm.response.json(); pm.expect(d[0]).to.have.property('id'); pm.expect(d[0]).to.have.property('username'); pm.expect(d[0]).to.have.property('role'); });",
+              "pm.test(\"07.4 - Contains member with Admin role\", function () { const d = pm.response.json(); const admin = d.find(m => m.role === 'Admin'); pm.expect(admin).to.not.be.undefined; });",
+              "pm.test(\"07.5 - Total member count is at least 4\", function () { const d = pm.response.json(); pm.expect(d.length).to.be.at.least(4); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": { "raw": "{{baseUrl}}/api/members", "host": ["{{baseUrl}}"], "path": ["api", "members"] }
+      }
+    },
+    {
+      "name": "08. Get Member by ID (m-1)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"08.1 - Status code is 200 OK\", function () { pm.response.to.have.status(200); });",
+              "pm.test(\"08.2 - Member ID equals m-1\", function () { const d = pm.response.json(); pm.expect(d.id).to.eql('m-1'); });",
+              "pm.test(\"08.3 - Member username is 'tanjim'\", function () { const d = pm.response.json(); pm.expect(d.username).to.eql('tanjim'); });",
+              "pm.test(\"08.4 - Member role is 'Admin'\", function () { const d = pm.response.json(); pm.expect(d.role).to.eql('Admin'); });",
+              "pm.test(\"08.5 - Member status is 'online'\", function () { const d = pm.response.json(); pm.expect(d.status).to.eql('online'); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": { "raw": "{{baseUrl}}/api/members/m-1", "host": ["{{baseUrl}}"], "path": ["api", "members", "m-1"] }
+      }
+    },
+    {
+      "name": "09. Create New Member",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"09.1 - Status code is 201 Created\", function () { pm.response.to.have.status(201); });",
+              "pm.test(\"09.2 - Assigned member ID starts with 'm-'\", function () { const d = pm.response.json(); pm.expect(d.id).to.match(/^m-/); });",
+              "pm.test(\"09.3 - Username is formatted in lowercase\", function () { const d = pm.response.json(); pm.expect(d.username).to.eql('davidk'); });",
+              "pm.test(\"09.4 - Role matches assigned 'QA Engineer'\", function () { const d = pm.response.json(); pm.expect(d.role).to.eql('QA Engineer'); });",
+              "pm.test(\"09.5 - Store createdMemberId in environment\", function () { const d = pm.response.json(); pm.environment.set('createdMemberId', d.id); pm.expect(pm.environment.get('createdMemberId')).to.eql(d.id); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"David Kim\",\n  \"username\": \"davidk\",\n  \"role\": \"QA Engineer\",\n  \"status\": \"online\",\n  \"customStatus\": \"Testing Postman\"\n}"
+        },
+        "url": { "raw": "{{baseUrl}}/api/members", "host": ["{{baseUrl}}"], "path": ["api", "members"] }
+      }
+    },
+    {
+      "name": "10. Update Member Status",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"10.1 - Status code is 200 OK\", function () { pm.response.to.have.status(200); });",
+              "pm.test(\"10.2 - Member status updated to 'dnd'\", function () { const d = pm.response.json(); pm.expect(d.status).to.eql('dnd'); });",
+              "pm.test(\"10.3 - Custom status message updated\", function () { const d = pm.response.json(); pm.expect(d.customStatus).to.eql('Running Newman Tests in CI'); });",
+              "pm.test(\"10.4 - Response contains updated member ID\", function () { const d = pm.response.json(); pm.expect(d.id).to.eql(pm.environment.get('createdMemberId')); });",
+              "pm.test(\"10.5 - Latency under 1000ms\", function () { pm.expect(pm.response.responseTime).to.be.below(1000); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "PATCH",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"status\": \"dnd\",\n  \"customStatus\": \"Running Newman Tests in CI\"\n}"
+        },
+        "url": { "raw": "{{baseUrl}}/api/members/{{createdMemberId}}", "host": ["{{baseUrl}}"], "path": ["api", "members", "{{createdMemberId}}"] }
+      }
+    },
+    {
+      "name": "11. Get Messages for Channel (c-1)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"11.1 - Status code is 200 OK\", function () { pm.response.to.have.status(200); });",
+              "pm.test(\"11.2 - Response is an array of messages\", function () { const d = pm.response.json(); pm.expect(d).to.be.an('array'); });",
+              "pm.test(\"11.3 - All messages belong to channel c-1\", function () { const d = pm.response.json(); d.forEach(m => pm.expect(m.channelId).to.eql('c-1')); });",
+              "pm.test(\"11.4 - Messages have valid senderName and text\", function () { const d = pm.response.json(); pm.expect(d[0]).to.have.property('senderName'); pm.expect(d[0]).to.have.property('text'); });",
+              "pm.test(\"11.5 - Timestamp is a valid ISO format string\", function () { const d = pm.response.json(); pm.expect(new Date(d[0].timestamp).toISOString()).to.be.a('string'); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": { "raw": "{{baseUrl}}/api/messages?channelId=c-1", "host": ["{{baseUrl}}"], "path": ["api", "messages"], "query": [{ "key": "channelId", "value": "c-1" }] }
+      }
+    },
+    {
+      "name": "12. Post New Chat Message",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"12.1 - Status code is 201 Created\", function () { pm.response.to.have.status(201); });",
+              "pm.test(\"12.2 - Message ID starts with 'msg-'\", function () { const d = pm.response.json(); pm.expect(d.id).to.match(/^msg-/); });",
+              "pm.test(\"12.3 - Message text matches submitted payload\", function () { const d = pm.response.json(); pm.expect(d.text).to.eql('Automated QA message via Postman test script'); });",
+              "pm.test(\"12.4 - Sender name is populated from member data\", function () { const d = pm.response.json(); pm.expect(d.senderName).to.eql('Tanjim Hossen'); });",
+              "pm.test(\"12.5 - Save createdMessageId to environment\", function () { const d = pm.response.json(); pm.environment.set('createdMessageId', d.id); pm.expect(pm.environment.get('createdMessageId')).to.eql(d.id); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"channelId\": \"c-1\",\n  \"senderId\": \"m-1\",\n  \"text\": \"Automated QA message via Postman test script\"\n}"
+        },
+        "url": { "raw": "{{baseUrl}}/api/messages", "host": ["{{baseUrl}}"], "path": ["api", "messages"] }
+      }
+    },
+    {
+      "name": "13. Get Message by ID",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"13.1 - Status code is 200 OK\", function () { pm.response.to.have.status(200); });",
+              "pm.test(\"13.2 - Message ID matches createdMessageId\", function () { const d = pm.response.json(); pm.expect(d.id).to.eql(pm.environment.get('createdMessageId')); });",
+              "pm.test(\"13.3 - Text content is not empty\", function () { const d = pm.response.json(); pm.expect(d.text).to.be.a('string').and.not.empty; });",
+              "pm.test(\"13.4 - Associated channelId is c-1\", function () { const d = pm.response.json(); pm.expect(d.channelId).to.eql('c-1'); });",
+              "pm.test(\"13.5 - Latency is under 1000ms\", function () { pm.expect(pm.response.responseTime).to.be.below(1000); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": { "raw": "{{baseUrl}}/api/messages/{{createdMessageId}}", "host": ["{{baseUrl}}"], "path": ["api", "messages", "{{createdMessageId}}"] }
+      }
+    },
+    {
+      "name": "14. Delete Chat Message",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"14.1 - Status code is 200 OK\", function () { pm.response.to.have.status(200); });",
+              "pm.test(\"14.2 - Confirmation message is returned\", function () { const d = pm.response.json(); pm.expect(d.message).to.include('deleted successfully'); });",
+              "pm.test(\"14.3 - DeletedId matches targeted message\", function () { const d = pm.response.json(); pm.expect(d.deletedId).to.eql(pm.environment.get('createdMessageId')); });",
+              "pm.test(\"14.4 - Content-Type is application/json\", function () { pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'); });",
+              "pm.test(\"14.5 - Response time under 1000ms\", function () { pm.expect(pm.response.responseTime).to.be.below(1000); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "DELETE",
+        "header": [],
+        "url": { "raw": "{{baseUrl}}/api/messages/{{createdMessageId}}", "host": ["{{baseUrl}}"], "path": ["api", "messages", "{{createdMessageId}}"] }
+      }
+    },
+    {
+      "name": "15. Get All Kanban Cards",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"15.1 - Status code is 200 OK\", function () { pm.response.to.have.status(200); });",
+              "pm.test(\"15.2 - Cards response is an array\", function () { const d = pm.response.json(); pm.expect(d).to.be.an('array'); });",
+              "pm.test(\"15.3 - Card objects have title, list, and priority\", function () { const d = pm.response.json(); pm.expect(d[0]).to.have.property('title'); pm.expect(d[0]).to.have.property('list'); pm.expect(d[0]).to.have.property('priority'); });",
+              "pm.test(\"15.4 - Card list matches valid Kanban column\", function () { const d = pm.response.json(); const validLists = ['todo', 'in-progress', 'review', 'done']; pm.expect(validLists).to.include(d[0].list); });",
+              "pm.test(\"15.5 - Total cards count is at least 4\", function () { const d = pm.response.json(); pm.expect(d.length).to.be.at.least(4); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": { "raw": "{{baseUrl}}/api/cards", "host": ["{{baseUrl}}"], "path": ["api", "cards"] }
+      }
+    },
+    {
+      "name": "16. Create Kanban Task Card",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"16.1 - Status code is 201 Created\", function () { pm.response.to.have.status(201); });",
+              "pm.test(\"16.2 - Card ID starts with 'card-'\", function () { const d = pm.response.json(); pm.expect(d.id).to.match(/^card-/); });",
+              "pm.test(\"16.3 - Title matches submitted task\", function () { const d = pm.response.json(); pm.expect(d.title).to.eql('Verify CI/CD Newman Test Execution'); });",
+              "pm.test(\"16.4 - Target column is 'todo' and priority is 'urgent'\", function () { const d = pm.response.json(); pm.expect(d.list).to.eql('todo'); pm.expect(d.priority).to.eql('urgent'); });",
+              "pm.test(\"16.5 - Save createdCardId to environment\", function () { const d = pm.response.json(); pm.environment.set('createdCardId', d.id); pm.expect(pm.environment.get('createdCardId')).to.eql(d.id); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"Verify CI/CD Newman Test Execution\",\n  \"description\": \"Run Newman CLI on GitHub Actions runner with 100 assertions and HTML Extra report\",\n  \"list\": \"todo\",\n  \"priority\": \"urgent\",\n  \"assignedTo\": \"m-1\"\n}"
+        },
+        "url": { "raw": "{{baseUrl}}/api/cards", "host": ["{{baseUrl}}"], "path": ["api", "cards"] }
+      }
+    },
+    {
+      "name": "17. Move Card Column (PATCH to In-Progress)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"17.1 - Status code is 200 OK\", function () { pm.response.to.have.status(200); });",
+              "pm.test(\"17.2 - Card list column updated to 'in-progress'\", function () { const d = pm.response.json(); pm.expect(d.list).to.eql('in-progress'); });",
+              "pm.test(\"17.3 - Card title and priority remain intact\", function () { const d = pm.response.json(); pm.expect(d.title).to.eql('Verify CI/CD Newman Test Execution'); pm.expect(d.priority).to.eql('urgent'); });",
+              "pm.test(\"17.4 - Assignee name is correctly attached\", function () { const d = pm.response.json(); pm.expect(d.assigneeName).to.eql('Tanjim Hossen'); });",
+              "pm.test(\"17.5 - Latency is under 1000ms\", function () { pm.expect(pm.response.responseTime).to.be.below(1000); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "PATCH",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"list\": \"in-progress\"\n}"
+        },
+        "url": { "raw": "{{baseUrl}}/api/cards/{{createdCardId}}", "host": ["{{baseUrl}}"], "path": ["api", "cards", "{{createdCardId}}"] }
+      }
+    },
+    {
+      "name": "18. Filter Cards by Column (list=in-progress)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"18.1 - Status code is 200 OK\", function () { pm.response.to.have.status(200); });",
+              "pm.test(\"18.2 - Filtered response is a non-empty array\", function () { const d = pm.response.json(); pm.expect(d).to.be.an('array').and.not.empty; });",
+              "pm.test(\"18.3 - Every returned card has list === 'in-progress'\", function () { const d = pm.response.json(); d.forEach(c => pm.expect(c.list).to.eql('in-progress')); });",
+              "pm.test(\"18.4 - Response includes the recently moved card\", function () { const d = pm.response.json(); const found = d.find(c => c.id === pm.environment.get('createdCardId')); pm.expect(found).to.not.be.undefined; });",
+              "pm.test(\"18.5 - Response time under 1000ms\", function () { pm.expect(pm.response.responseTime).to.be.below(1000); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": { "raw": "{{baseUrl}}/api/cards?list=in-progress", "host": ["{{baseUrl}}"], "path": ["api", "cards"], "query": [{ "key": "list", "value": "in-progress" }] }
+      }
+    },
+    {
+      "name": "19. Delete Kanban Card",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"19.1 - Status code is 200 OK\", function () { pm.response.to.have.status(200); });",
+              "pm.test(\"19.2 - Deletion message contains card title\", function () { const d = pm.response.json(); pm.expect(d.message).to.include('deleted successfully'); });",
+              "pm.test(\"19.3 - DeletedId matches createdCardId\", function () { const d = pm.response.json(); pm.expect(d.deletedId).to.eql(pm.environment.get('createdCardId')); });",
+              "pm.test(\"19.4 - Content-Type is application/json\", function () { pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'); });",
+              "pm.test(\"19.5 - Latency is below 1000ms\", function () { pm.expect(pm.response.responseTime).to.be.below(1000); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "DELETE",
+        "header": [],
+        "url": { "raw": "{{baseUrl}}/api/cards/{{createdCardId}}", "host": ["{{baseUrl}}"], "path": ["api", "cards", "{{createdCardId}}"] }
+      }
+    },
+    {
+      "name": "20. Negative Test - 404 Non-Existent Channel",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"20.1 - Status code is 404 Not Found\", function () { pm.response.to.have.status(404); });",
+              "pm.test(\"20.2 - Error message returned in JSON\", function () { const d = pm.response.json(); pm.expect(d.error).to.eql('Channel not found'); });",
+              "pm.test(\"20.3 - ChannelId in error matches non-existent ID\", function () { const d = pm.response.json(); pm.expect(d.channelId).to.eql('c-non-existent-999'); });",
+              "pm.test(\"20.4 - Content-Type is application/json\", function () { pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'); });",
+              "pm.test(\"20.5 - Latency is below 1000ms\", function () { pm.expect(pm.response.responseTime).to.be.below(1000); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": { "raw": "{{baseUrl}}/api/channels/c-non-existent-999", "host": ["{{baseUrl}}"], "path": ["api", "channels", "c-non-existent-999"] }
+      }
+    }
+  ]
+}

@@ -1,7 +1,9 @@
-name: Rosetta CI/CD Deployment Pipeline
+name: Rosetta CI/CD Pipeline (Postman Quality Gate & VPS Deploy)
 
 on:
   push:
+    branches: [ "main", "development" ]
+  pull_request:
     branches: [ "main" ]
   workflow_dispatch:
 
@@ -10,8 +12,11 @@ permissions:
   packages: write
 
 jobs:
-  build-and-deploy:
-    name: Build Application & Deploy to Azure VPS
+  # ==============================================================
+  # STAGE 1: POSTMAN AUTOMATED TEST SUITE (Runs on development & main)
+  # ==============================================================
+  postman-quality-gate:
+    name: 🧪 Postman & Newman Automated Quality Gate
     runs-on: ubuntu-latest
 
     steps:
@@ -24,10 +29,49 @@ jobs:
           node-version: 20
           cache: 'npm'
 
-      - name: Install Dependencies & Build Frontend
+      - name: Install Dependencies
         run: |
           npm ci || npm install
-          npm run build
+          npm install -g newman newman-reporter-htmlextra
+
+      - name: Validate Frontend Production Build
+        run: npm run build
+
+      - name: Start Rosetta Backend Server
+        run: |
+          node server.js &
+          echo "SERVER_PID=$!" >> $GITHUB_ENV
+          echo "Waiting for server to boot..."
+          sleep 3
+
+      - name: Run Postman Collection via Newman CLI
+        run: |
+          mkdir -p reports
+          newman run postman/rosetta_collection.json \
+            -e postman/rosetta_environment.json \
+            --reporters cli,htmlextra \
+            --reporter-htmlextra-export reports/newman_report.html
+
+      - name: Upload Postman Test Report Artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: postman-newman-test-report
+          path: reports/newman_report.html
+          retention-days: 14
+
+  # ==============================================================
+  # STAGE 2: PRODUCTION DEPLOYMENT (Only triggers on main branch)
+  # ==============================================================
+  deploy-production:
+    name: 🚀 Deploy to Azure VPS (Production)
+    needs: [postman-quality-gate]
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
       - name: Set Lowercase Image Name
         run: |

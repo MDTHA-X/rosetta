@@ -553,6 +553,51 @@ app.get('/api/members', (req, res) => {
   res.status(200).json(db.members);
 });
 
+app.get('/api/members/:id', (req, res) => {
+  const member = db.members.find(m => m.id === req.params.id);
+  if (!member) {
+    return res.status(404).json({ error: 'Member not found' });
+  }
+  res.status(200).json(member);
+});
+
+app.post('/api/members', (req, res) => {
+  const { name, username, role, customStatus, avatar } = req.body;
+  if (!name || !username) {
+    return res.status(400).json({ error: 'Name and username are required' });
+  }
+
+  const newMember = {
+    id: `m-${Date.now()}`,
+    name: name.trim(),
+    username: username.trim().toLowerCase(),
+    role: role || 'Member',
+    status: 'online',
+    customStatus: customStatus || 'Working on Rosetta',
+    avatar: avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${username}`,
+    createdAt: new Date().toISOString()
+  };
+
+  db.members.push(newMember);
+  saveData(db);
+  res.status(201).json(newMember);
+});
+
+app.patch('/api/members/:id', (req, res) => {
+  const member = db.members.find(m => m.id === req.params.id);
+  if (!member) {
+    return res.status(404).json({ error: 'Member not found' });
+  }
+
+  const { status, role, customStatus } = req.body;
+  if (status) member.status = status;
+  if (role) member.role = role;
+  if (customStatus !== undefined) member.customStatus = customStatus;
+
+  saveData(db);
+  res.status(200).json(member);
+});
+
 // ==========================================
 // 9. FRONTEND STATIC ASSETS & FALLBACK
 // ==========================================

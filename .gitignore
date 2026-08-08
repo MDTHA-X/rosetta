@@ -4,8 +4,7 @@ dist/
 npm-debug.log*
 data/
 
-# Test suites and reports
-postman/
+# Local reports & scripts
 jmeter/
 reports/
 scripts/
