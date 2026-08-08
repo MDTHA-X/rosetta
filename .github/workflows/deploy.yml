@@ -1,8 +1,9 @@
-name: CI/CD Pipeline
+name: Rosetta CI/CD Deployment Pipeline
 
 on:
   push:
     branches: [ "main" ]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -10,11 +11,27 @@ permissions:
 
 jobs:
   build-and-deploy:
+    name: Build Application & Deploy to Azure VPS
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+
+      - name: Set up Node.js Environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Dependencies & Build Frontend
+        run: |
+          npm ci || npm install
+          npm run build
+
+      - name: Set Lowercase Image Name
+        run: |
+          echo "IMAGE_NAME=ghcr.io/${GITHUB_REPOSITORY,,}" >> $GITHUB_ENV
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
@@ -28,17 +45,17 @@ jobs:
         with:
           context: .
           push: true
-          tags: ghcr.io/mdtha-x/web-app:latest
+          tags: ${{ env.IMAGE_NAME }}:latest
 
-      - name: Deploy to Azure VPS
+      - name: Deploy to Azure VPS via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_KEY }}
           script: |
-            cd ~/app
+            mkdir -p ~/app && cd ~/app
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-            docker compose pull
+            docker compose pull || true
             docker compose up -d --remove-orphans
             docker image prune -f

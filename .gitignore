@@ -1,3 +1,12 @@
 node_modules/
+dist/
 .env
 npm-debug.log*
+data/
+
+# Test suites and reports
+postman/
+jmeter/
+reports/
+scripts/
+ASSIGNMENT_REPORT.md

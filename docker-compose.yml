@@ -1,0 +1,10 @@
+version: '3.8'
+
+services:
+  web:
+    image: ghcr.io/mdtha-x/rosetta:latest
+    restart: always
+    ports:
+      - "80:3000"
+    environment:
+      - PORT=3000
