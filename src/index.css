@@ -5,29 +5,25 @@
   --font-heading: 'Outfit', sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
 
-  /* Discord Theme Palette */
+  /* Theme Palette */
   --dc-bg-server: #1e1f22;
-  --dc-bg-sidebar: #2b2d31;
-  --dc-bg-chat: #313338;
-  --dc-bg-input: #383a40;
-  --dc-bg-hover: #35373c;
-  --dc-bg-active: #404249;
-  --dc-text-normal: #dbdee1;
-  --dc-text-muted: #949ba4;
-  --dc-text-header: #f2f3f5;
-  --dc-brand: #5865f2;
-  --dc-brand-hover: #4752c4;
-  --dc-danger: #f23f43;
-  --dc-success: #23a55a;
-  --dc-warning: #f0b232;
-  --dc-border: #1f2023;
+  --dc-bg-sidebar: #1e293b;
+  --dc-bg-chat: #0f172a;
+  --dc-bg-input: #1e293b;
+  --dc-bg-hover: #334155;
+  --dc-bg-active: #475569;
+  --dc-text-normal: #e2e8f0;
+  --dc-text-muted: #94a3b8;
+  --dc-text-header: #f8fafc;
+  --dc-brand: #6366f1;
+  --dc-brand-hover: #4f46e5;
+  --dc-danger: #ef4444;
+  --dc-success: #10b981;
+  --dc-warning: #f59e0b;
+  --dc-border: #334155;
 
-  /* Trello Palette */
-  --tr-bg: #0f172a;
-  --tr-column: #1e293b;
-  --tr-card: #334155;
-  --tr-card-hover: #3e4c5f;
-  --tr-brand: #0284c7;
+  /* Standard Panes Header Height */
+  --header-height: 56px;
 }
 
 * {
@@ -72,21 +68,89 @@ button, input, select, textarea {
   background: rgba(255, 255, 255, 0.3);
 }
 
+/* Standardized Pane Headers (Task 8) */
+.pane-header {
+  height: var(--header-height);
+  min-height: var(--header-height);
+  max-height: var(--header-height);
+  padding: 0 16px;
+  border-bottom: 1px solid var(--dc-border);
+  background-color: var(--dc-bg-sidebar);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* Unread Badge (Task 3) */
+.unread-badge {
+  background-color: var(--dc-danger);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 10px;
+  margin-left: auto;
+  line-height: 1.2;
+}
+
+/* Message Rows & Grouping (Task 4) */
+.message-row {
+  position: relative;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: background-color 0.15s ease;
+}
+.message-row:hover {
+  background-color: rgba(255, 255, 255, 0.04);
+}
+.message-row.grouped {
+  padding-left: 50px;
+  margin-top: -6px;
+}
+.message-row.grouped .hover-time {
+  position: absolute;
+  left: 10px;
+  top: 6px;
+  font-size: 10px;
+  color: var(--dc-text-muted);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+}
+.message-row.grouped:hover .hover-time {
+  opacity: 1;
+}
+
+/* Empty Column Placeholder (Task 5) */
+.empty-column-placeholder {
+  border: 2px dashed #334155;
+  border-radius: 8px;
+  padding: 28px 12px;
+  text-align: center;
+  color: #64748b;
+  font-size: 13px;
+  margin: 4px 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+  background-color: rgba(15, 23, 42, 0.4);
+  transition: border-color 0.2s ease, color 0.2s ease;
+}
+.empty-column-placeholder:hover {
+  border-color: #475569;
+  color: #94a3b8;
+}
+
 /* Animations */
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
-@keyframes pulseGlow {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.5; transform: scale(0.9); }
-}
-
 .fade-in {
   animation: fadeIn 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-
-.status-pulse {
-  animation: pulseGlow 2.5s infinite ease-in-out;
 }

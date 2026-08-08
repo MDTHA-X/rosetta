@@ -20,12 +20,13 @@ const getInitialData = () => ({
   boardConfig: {
     title: "Sprint Alpha Board",
     columns: [
-      { id: "todo", title: "To Do" },
-      { id: "in-progress", title: "In Progress" },
-      { id: "review", title: "Review" },
-      { id: "done", title: "Done" }
+      { id: "todo", title: "To Do", limit: null },
+      { id: "in-progress", title: "In Progress", limit: 3 },
+      { id: "review", title: "Review", limit: 4 },
+      { id: "done", title: "Done", limit: null }
     ]
   },
+  channelReads: [],
   users: [
     { id: "u-1", name: "Tanjim Hossen", email: "tanjim@example.com", username: "tanjim", password: "password123", role: "Admin", status: "online", customStatus: "Building Rosetta 🚀", avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80", createdAt: new Date().toISOString() },
     { id: "u-2", name: "Alex Rivera", email: "alex@example.com", username: "arivera", password: "password123", role: "Lead Developer", status: "online", customStatus: "Refactoring APIs", avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80", createdAt: new Date().toISOString() },
@@ -76,6 +77,7 @@ function loadData() {
     if (!parsed.boardConfig) parsed.boardConfig = getInitialData().boardConfig;
     if (!parsed.users) parsed.users = getInitialData().users;
     if (!parsed.connections) parsed.connections = getInitialData().connections;
+    if (!parsed.channelReads) parsed.channelReads = [];
     return parsed;
   } catch (err) {
     console.error('Error loading data:', err);
@@ -130,7 +132,11 @@ app.patch('/api/board/config', (req, res) => {
   
   if (title !== undefined) db.boardConfig.title = title.trim();
   if (Array.isArray(columns)) {
-    db.boardConfig.columns = columns;
+    db.boardConfig.columns = columns.map(col => ({
+      id: col.id,
+      title: col.title || col.name || col.id,
+      limit: col.limit !== undefined ? (col.limit ? parseInt(col.limit, 10) : null) : null
+    }));
   }
 
   saveData(db);
@@ -395,6 +401,51 @@ app.delete('/api/channels/:id', (req, res) => {
   db.messages = db.messages.filter(m => m.channelId !== deleted.id);
   saveData(db);
   res.status(200).json({ message: `Channel #${deleted.name} deleted successfully`, deletedId: deleted.id });
+});
+
+// Unread Channels & Last-Read Tracking (Task 3)
+app.get('/api/channels/unread', (req, res) => {
+  const { userId } = req.query;
+  if (!userId) {
+    return res.status(400).json({ error: 'userId query parameter is required' });
+  }
+
+  if (!db.channelReads) db.channelReads = [];
+
+  const unreadData = db.channels.map(ch => {
+    const record = db.channelReads.find(r => r.userId === userId && r.channelId === ch.id);
+    const lastReadTime = record ? new Date(record.lastReadAt).getTime() : 0;
+    const channelMsgs = db.messages.filter(m => m.channelId === ch.id);
+    const unreadMsgs = channelMsgs.filter(m => new Date(m.timestamp).getTime() > lastReadTime);
+    return {
+      channelId: ch.id,
+      unread: unreadMsgs.length > 0,
+      unreadCount: unreadMsgs.length
+    };
+  });
+
+  res.status(200).json(unreadData);
+});
+
+app.post('/api/channels/:id/read', (req, res) => {
+  const channelId = req.params.id;
+  const { userId } = req.body;
+  if (!userId) {
+    return res.status(400).json({ error: 'userId is required' });
+  }
+
+  if (!db.channelReads) db.channelReads = [];
+  const now = new Date().toISOString();
+  let record = db.channelReads.find(r => r.userId === userId && r.channelId === channelId);
+  if (record) {
+    record.lastReadAt = now;
+  } else {
+    record = { userId, channelId, lastReadAt: now };
+    db.channelReads.push(record);
+  }
+
+  saveData(db);
+  res.status(200).json({ success: true, record });
 });
 
 // ==========================================

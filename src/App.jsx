@@ -3,11 +3,9 @@ import React, { useState, useEffect, useRef } from 'react';
 const API_BASE = '/api';
 
 export default function App() {
-  // Current Authenticated User
-  const [currentUser, setCurrentUser] = useState(() => {
-    const saved = localStorage.getItem('rosetta_user');
-    return saved ? JSON.parse(saved) : null;
-  });
+  // Current Authenticated User & Auth Checked Flag (Task 1)
+  const [currentUser, setCurrentUser] = useState(null);
+  const [authChecked, setAuthChecked] = useState(false);
 
   // Layout View Modes: 'split' (side-by-side) | 'messages' | 'board'
   const [layoutMode, setLayoutMode] = useState('split');
@@ -32,12 +30,15 @@ export default function App() {
   const [boardConfig, setBoardConfig] = useState({
     title: "Sprint Alpha Board",
     columns: [
-      { id: "todo", title: "To Do" },
-      { id: "in-progress", title: "In Progress" },
-      { id: "review", title: "Review" },
-      { id: "done", title: "Done" }
+      { id: "todo", title: "To Do", limit: null },
+      { id: "in-progress", title: "In Progress", limit: 3 },
+      { id: "review", title: "Review", limit: 4 },
+      { id: "done", title: "Done", limit: null }
     ]
   });
+
+  // Unread Channel Map State (Task 3: { [channelId]: { unread: boolean, unreadCount: number } })
+  const [unreadMap, setUnreadMap] = useState({});
 
   // Message Editing State
   const [editingMessageId, setEditingMessageId] = useState(null);
@@ -48,6 +49,14 @@ export default function App() {
   const [tempBoardTitle, setTempBoardTitle] = useState('');
   const [editingColumnId, setEditingColumnId] = useState(null);
   const [tempColumnTitle, setTempColumnTitle] = useState('');
+
+  // Card Detail Modal State (Task 6)
+  const [expandedCardId, setExpandedCardId] = useState(null);
+  const [detailTitle, setDetailTitle] = useState('');
+  const [detailDesc, setDetailDesc] = useState('');
+  const [detailPriority, setDetailPriority] = useState('medium');
+  const [detailList, setDetailList] = useState('todo');
+  const [detailAssignee, setDetailAssignee] = useState('');
 
   // Network & Connections Data
   const [connections, setConnections] = useState({ known: [], pendingIncoming: [], pendingOutgoing: [] });
@@ -69,23 +78,44 @@ export default function App() {
 
   const messagesEndRef = useRef(null);
 
-  // Initial Load
+  // Task 1: Mount-time Auth Check and Initial Data Fetch
   useEffect(() => {
-    fetchInitialData();
+    const initializeSessionAndData = async () => {
+      try {
+        const saved = localStorage.getItem('rosetta_user');
+        if (saved) {
+          try {
+            const parsed = JSON.parse(saved);
+            setCurrentUser(parsed);
+          } catch (e) {
+            console.error('Failed to parse saved user:', e);
+          }
+        }
+      } finally {
+        setAuthChecked(true);
+      }
+      await fetchInitialData();
+    };
+
+    initializeSessionAndData();
   }, []);
 
-  // Sync Current User to LocalStorage & auto-login first seed user if none
+  // Sync Current User to LocalStorage & load connections & unread badges
   useEffect(() => {
     if (currentUser) {
       localStorage.setItem('rosetta_user', JSON.stringify(currentUser));
       fetchConnections(currentUser.id);
+      fetchUnreadStatus(currentUser.id);
     }
   }, [currentUser]);
 
-  // Fetch messages on channel switch
+  // Fetch messages and mark channel as read when channel switches
   useEffect(() => {
     if (activeChannelId) {
       fetchMessages(activeChannelId);
+      if (currentUser) {
+        markChannelRead(activeChannelId, currentUser.id);
+      }
     }
   }, [activeChannelId]);
 
@@ -95,6 +125,33 @@ export default function App() {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
   }, [messages, editingMessageId]);
+
+  // Periodic polling for new messages & unread counts (every 3 seconds)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (activeChannelId) {
+        fetchMessages(activeChannelId);
+      }
+      if (currentUser) {
+        fetchUnreadStatus(currentUser.id);
+      }
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [activeChannelId, currentUser]);
+
+  // Sync Card Detail Modal state when expandedCard changes (Task 6)
+  useEffect(() => {
+    if (expandedCardId) {
+      const targetCard = cards.find(c => c.id === expandedCardId);
+      if (targetCard) {
+        setDetailTitle(targetCard.title || '');
+        setDetailDesc(targetCard.description || '');
+        setDetailPriority(targetCard.priority || 'medium');
+        setDetailList(targetCard.list || 'todo');
+        setDetailAssignee(targetCard.assignedTo || '');
+      }
+    }
+  }, [expandedCardId, cards]);
 
   const fetchInitialData = async () => {
     try {
@@ -119,7 +176,9 @@ export default function App() {
         setActiveChannelId(chData[0].id);
       }
 
-      if (!currentUser && Array.isArray(usersData) && usersData.length > 0) {
+      // Default fallback session if no user is saved
+      const saved = localStorage.getItem('rosetta_user');
+      if (!saved && Array.isArray(usersData) && usersData.length > 0) {
         setCurrentUser(usersData[0]);
       }
     } catch (err) {
@@ -147,6 +206,52 @@ export default function App() {
       }
     } catch (err) {
       console.error('Error fetching connections:', err);
+    }
+  };
+
+  // Task 3: Unread Status APIs
+  const fetchUnreadStatus = async (userId) => {
+    if (!userId) return;
+    try {
+      const res = await fetch(`${API_BASE}/channels/unread?userId=${userId}`);
+      if (res.ok) {
+        const data = await res.json();
+        const map = {};
+        if (Array.isArray(data)) {
+          data.forEach(item => {
+            map[item.channelId] = item;
+          });
+        }
+        setUnreadMap(map);
+      }
+    } catch (err) {
+      console.error('Error fetching unread channels:', err);
+    }
+  };
+
+  const markChannelRead = async (channelId, userId) => {
+    if (!channelId || !userId) return;
+    // Optimistic clear in UI
+    setUnreadMap(prev => ({
+      ...prev,
+      [channelId]: { channelId, unread: false, unreadCount: 0 }
+    }));
+
+    try {
+      await fetch(`${API_BASE}/channels/${channelId}/read`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId })
+      });
+    } catch (err) {
+      console.error('Error marking channel read:', err);
+    }
+  };
+
+  const handleSelectChannel = (channelId) => {
+    setActiveChannelId(channelId);
+    if (currentUser) {
+      markChannelRead(channelId, currentUser.id);
     }
   };
 
@@ -227,7 +332,9 @@ export default function App() {
   // Message Handlers (Send, Edit, Delete)
   const handleSendMessage = async (e) => {
     e.preventDefault();
-    if (!newMessageText.trim() || !activeChannelId || !currentUser) return;
+    if (!currentUser) return; // Task 1 guard
+    if (!newMessageText.trim() || !activeChannelId) return;
+
     try {
       const res = await fetch(`${API_BASE}/messages`, {
         method: 'POST',
@@ -240,8 +347,10 @@ export default function App() {
       });
       if (res.ok) {
         const created = await res.json();
-        setMessages([...messages, created]);
+        setMessages(prev => [...prev, created]);
         setNewMessageText('');
+        // Mark current channel as read
+        markChannelRead(activeChannelId, currentUser.id);
       }
     } catch (err) {
       console.error('Error sending message:', err);
@@ -351,6 +460,37 @@ export default function App() {
     }
   };
 
+  // Task 6: Card Detail Save Handler
+  const handleSaveCardDetail = async (e) => {
+    e.preventDefault();
+    if (!expandedCardId) return;
+
+    const assigneeUser = allUsers.find(u => u.id === detailAssignee);
+    const assigneeName = assigneeUser ? assigneeUser.name : 'Unassigned';
+
+    try {
+      const res = await fetch(`${API_BASE}/cards/${expandedCardId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: detailTitle.trim(),
+          description: detailDesc.trim(),
+          priority: detailPriority,
+          list: detailList,
+          assignedTo: detailAssignee || null,
+          assigneeName
+        })
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setCards(cards.map(c => c.id === expandedCardId ? updated : c));
+        setExpandedCardId(null);
+      }
+    } catch (err) {
+      console.error('Error updating card details:', err);
+    }
+  };
+
   const handleMoveCard = async (cardId, currentList, direction) => {
     const listOrder = boardConfig.columns.map(c => c.id);
     const idx = listOrder.indexOf(currentList);
@@ -377,6 +517,7 @@ export default function App() {
       const res = await fetch(`${API_BASE}/cards/${id}`, { method: 'DELETE' });
       if (res.ok) {
         setCards(cards.filter(c => c.id !== id));
+        if (expandedCardId === id) setExpandedCardId(null);
       }
     } catch (err) {
       console.error('Error deleting card:', err);
@@ -439,56 +580,36 @@ export default function App() {
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw', backgroundColor: '#0f172a', color: '#f8fafc', overflow: 'hidden' }}>
       
       {/* ============================================================ */}
-      {/* TOP HEADER & LAYOUT NAVIGATION */}
+      {/* TOP HEADER & LAYOUT NAVIGATION (Task 8: Standard 56px height) */}
       {/* ============================================================ */}
-      <header style={{
-        height: '52px',
-        backgroundColor: '#1e293b',
-        borderBottom: '1px solid #334155',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '0 16px',
-        flexShrink: 0,
-        zIndex: 20
-      }}>
-        {/* LOGO & DUAL PANE SWITCHER */}
+      <header className="pane-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
           <button
             onClick={() => setShowChannelsSidebar(!showChannelsSidebar)}
-            title="Toggle Channels Panel"
+            title="Toggle Channels Sidebar"
             style={{
-              background: '#334155',
-              border: 'none',
-              color: '#f8fafc',
-              borderRadius: '6px',
               padding: '6px 10px',
+              backgroundColor: '#334155',
+              border: 'none',
+              borderRadius: '6px',
+              color: '#f8fafc',
               cursor: 'pointer',
               fontSize: '13px',
               fontWeight: 700
             }}
           >
-            ☰ Channels
+            {showChannelsSidebar ? '◀ Hide Sidebar' : '▶ Channels'}
           </button>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <div style={{
-              width: '30px',
-              height: '30px',
-              borderRadius: '8px',
-              background: 'linear-gradient(135deg, #6366f1, #06b6d4)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontWeight: 800,
-              fontSize: '15px',
-              color: '#fff'
-            }}>R</div>
-            <span style={{ fontSize: '16px', fontWeight: 800 }}>Rosetta</span>
+            <span style={{ fontSize: '18px', fontWeight: 900, background: 'linear-gradient(135deg, #6366f1, #0284c7)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+              ROSETTA
+            </span>
+            <span style={{ fontSize: '11px', backgroundColor: '#334155', color: '#94a3b8', padding: '2px 6px', borderRadius: '4px', fontWeight: 600 }}>v1.3</span>
           </div>
 
-          {/* VIEW SELECTOR */}
-          <div style={{ display: 'flex', backgroundColor: '#0f172a', padding: '3px', borderRadius: '8px', gap: '3px' }}>
+          {/* VIEW SWITCHER */}
+          <div style={{ display: 'flex', backgroundColor: '#0f172a', padding: '3px', borderRadius: '8px', border: '1px solid #334155' }}>
             <button
               onClick={() => setLayoutMode('split')}
               style={{
@@ -502,7 +623,7 @@ export default function App() {
                 color: layoutMode === 'split' ? '#ffffff' : '#94a3b8'
               }}
             >
-              ◧ Side-by-Side (Split)
+              ◧ Side-by-Side
             </button>
             <button
               onClick={() => setLayoutMode('messages')}
@@ -517,7 +638,7 @@ export default function App() {
                 color: layoutMode === 'messages' ? '#ffffff' : '#94a3b8'
               }}
             >
-              💬 Messages Only
+              💬 Messages
             </button>
             <button
               onClick={() => setLayoutMode('board')}
@@ -532,7 +653,7 @@ export default function App() {
                 color: layoutMode === 'board' ? '#ffffff' : '#94a3b8'
               }}
             >
-              📋 Board Only
+              📋 Board
             </button>
           </div>
         </div>
@@ -603,25 +724,31 @@ export default function App() {
         {/* 1. CHANNELS DRAWER */}
         {showChannelsSidebar && (
           <aside style={{
-            width: '210px',
+            width: '220px',
             backgroundColor: '#1e293b',
             borderRight: '1px solid #334155',
             display: 'flex',
             flexDirection: 'column',
             flexShrink: 0
           }}>
-            <div style={{ padding: '12px 14px', borderBottom: '1px solid #334155', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', color: '#94a3b8' }}>Channels</span>
-              <button onClick={() => setShowChannelModal(true)} style={{ background: 'transparent', border: 'none', color: '#f8fafc', cursor: 'pointer', fontSize: '16px', fontWeight: 800 }}>+</button>
+            {/* Task 8: Standard 56px header alignment */}
+            <div className="pane-header" style={{ padding: '0 14px' }}>
+              <span style={{ fontSize: '12px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px', color: '#94a3b8' }}>Channels</span>
+              <button onClick={() => setShowChannelModal(true)} title="Create Channel" style={{ background: 'transparent', border: 'none', color: '#f8fafc', cursor: 'pointer', fontSize: '16px', fontWeight: 800 }}>+</button>
             </div>
 
             <div style={{ flex: 1, overflowY: 'auto', padding: '8px' }}>
               {channels.map(channel => {
                 const isActive = activeChannelId === channel.id;
+                // Task 3: Unread indicator
+                const unreadData = unreadMap[channel.id];
+                const isUnread = !isActive && unreadData?.unread;
+                const unreadCount = unreadData?.unreadCount || 0;
+
                 return (
                   <div
                     key={channel.id}
-                    onClick={() => setActiveChannelId(channel.id)}
+                    onClick={() => handleSelectChannel(channel.id)}
                     style={{
                       display: 'flex',
                       alignItems: 'center',
@@ -631,24 +758,33 @@ export default function App() {
                       cursor: 'pointer',
                       marginBottom: '4px',
                       backgroundColor: isActive ? '#334155' : 'transparent',
-                      color: isActive ? '#ffffff' : '#94a3b8',
+                      color: isActive ? '#ffffff' : isUnread ? '#ffffff' : '#94a3b8',
                       fontSize: '13px',
-                      fontWeight: isActive ? 700 : 500
+                      fontWeight: isActive ? 700 : isUnread ? 700 : 500,
+                      transition: 'background-color 0.15s ease'
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden' }}>
-                      <span style={{ color: isActive ? '#818cf8' : '#64748b' }}>#</span>
+                      <span style={{ color: isActive ? '#818cf8' : isUnread ? '#f8fafc' : '#64748b' }}>#</span>
                       <span style={{ whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>{channel.name}</span>
                     </div>
-                    {!channel.isDefault && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeleteChannel(channel.id, channel.isDefault);
-                        }}
-                        style={{ background: 'transparent', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '11px' }}
-                      >✕</button>
-                    )}
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      {/* Task 3 Unread Badge */}
+                      {isUnread && (
+                        <span className="unread-badge">{unreadCount}</span>
+                      )}
+
+                      {!channel.isDefault && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteChannel(channel.id, channel.isDefault);
+                          }}
+                          style={{ background: 'transparent', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '11px' }}
+                        >✕</button>
+                      )}
+                    </div>
                   </div>
                 );
               })}
@@ -656,7 +792,7 @@ export default function App() {
           </aside>
         )}
 
-        {/* 2. MESSAGES PANE (WITH MESSAGE EDITING) */}
+        {/* 2. MESSAGES PANE (WITH MESSAGE GROUPING & EDITING) */}
         {(layoutMode === 'split' || layoutMode === 'messages') && (
           <section style={{
             flex: layoutMode === 'split' ? '1 1 50%' : '1 1 100%',
@@ -667,37 +803,96 @@ export default function App() {
             minWidth: '320px',
             overflow: 'hidden'
           }}>
-            {/* MESSAGES HEADER */}
-            <div style={{
-              height: '46px',
-              borderBottom: '1px solid #334155',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '0 16px',
-              backgroundColor: '#1e293b'
-            }}>
+            {/* MESSAGES HEADER (Task 8: Standard 56px header & Task 2: Grammar pluralization) */}
+            <div className="pane-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <span style={{ color: '#818cf8', fontWeight: 800 }}>#</span>
                 <span style={{ fontWeight: 800, fontSize: '14px' }}>{activeChannel.name}</span>
                 <span style={{ color: '#64748b', fontSize: '12px' }}>— {activeChannel.description || 'Channel chat'}</span>
               </div>
-              <span style={{ fontSize: '11px', color: '#94a3b8' }}>{messages.length} messages</span>
+              <span style={{ fontSize: '11px', color: '#94a3b8' }}>
+                {messages.length} {messages.length === 1 ? 'message' : 'messages'}
+              </span>
             </div>
 
-            {/* MESSAGES STREAM */}
-            <div style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            {/* MESSAGES STREAM (Task 4: Group consecutive messages within 5 mins) */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
               {messages.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '40px 0', color: '#64748b' }}>
                   <p>No messages yet in #{activeChannel.name}.</p>
                 </div>
               ) : (
-                messages.map(msg => {
+                messages.map((msg, i) => {
                   const isMine = currentUser && (msg.senderId === currentUser.id || currentUser.role === 'Admin');
                   const isEditing = editingMessageId === msg.id;
 
+                  // Task 4: Grouping check
+                  const prevMsg = i > 0 ? messages[i - 1] : null;
+                  const isSameSender = prevMsg && (prevMsg.senderId === msg.senderId);
+                  const timeDiff = prevMsg ? Math.abs(new Date(msg.timestamp) - new Date(prevMsg.timestamp)) : Infinity;
+                  const isGrouped = isSameSender && (timeDiff < 300000); // 5 minutes threshold
+
+                  const formattedTime = new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+                  if (isGrouped) {
+                    return (
+                      <div key={msg.id} className="message-row grouped">
+                        <span className="hover-time">{formattedTime}</span>
+                        <div style={{ flex: 1 }}>
+                          {isEditing ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '4px' }}>
+                              <input
+                                type="text"
+                                value={editingMessageText}
+                                onChange={(e) => setEditingMessageText(e.target.value)}
+                                autoFocus
+                                style={{ padding: '6px 10px', borderRadius: '4px', backgroundColor: '#1e293b', border: '1px solid #6366f1', color: '#fff', fontSize: '13px' }}
+                              />
+                              <div style={{ display: 'flex', gap: '6px' }}>
+                                <button
+                                  onClick={() => handleSaveEditedMessage(msg.id)}
+                                  style={{ padding: '4px 10px', backgroundColor: '#6366f1', color: '#fff', border: 'none', borderRadius: '4px', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}
+                                >Save</button>
+                                <button
+                                  onClick={() => setEditingMessageId(null)}
+                                  style={{ padding: '4px 10px', backgroundColor: '#334155', color: '#cbd5e1', border: 'none', borderRadius: '4px', fontSize: '11px', cursor: 'pointer' }}
+                                >Cancel</button>
+                              </div>
+                            </div>
+                          ) : (
+                            <p style={{ fontSize: '13px', color: '#cbd5e1', lineHeight: 1.4 }}>
+                              {msg.text}
+                              {msg.edited && (
+                                <span style={{ fontSize: '10px', color: '#94a3b8', fontStyle: 'italic', marginLeft: '6px' }}>(edited)</span>
+                              )}
+                            </p>
+                          )}
+                        </div>
+
+                        {!isEditing && isMine && (
+                          <div style={{ display: 'flex', gap: '4px' }}>
+                            <button
+                              onClick={() => {
+                                setEditingMessageId(msg.id);
+                                setEditingMessageText(msg.text);
+                              }}
+                              title="Edit message"
+                              style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '12px' }}
+                            >✎</button>
+                            <button
+                              onClick={() => handleDeleteMessage(msg.id)}
+                              title="Delete message"
+                              style={{ background: 'transparent', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '11px' }}
+                            >✕</button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }
+
+                  // Non-grouped full message block
                   return (
-                    <div key={msg.id} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+                    <div key={msg.id} className="message-row" style={{ marginTop: i === 0 ? 0 : '8px' }}>
                       <img
                         src={msg.senderAvatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${msg.senderName}`}
                         alt=""
@@ -706,15 +901,12 @@ export default function App() {
                       <div style={{ flex: 1 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px' }}>
                           <span style={{ fontSize: '13px', fontWeight: 700, color: '#f8fafc' }}>{msg.senderName}</span>
-                          <span style={{ fontSize: '10px', color: '#64748b' }}>
-                            {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          </span>
+                          <span style={{ fontSize: '10px', color: '#64748b' }}>{formattedTime}</span>
                           {msg.edited && (
                             <span style={{ fontSize: '10px', color: '#94a3b8', fontStyle: 'italic' }}>(edited)</span>
                           )}
                         </div>
 
-                        {/* INLINE MESSAGE EDIT MODE */}
                         {isEditing ? (
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '4px' }}>
                             <input
@@ -740,7 +932,6 @@ export default function App() {
                         )}
                       </div>
 
-                      {/* MESSAGE ACTIONS (EDIT & DELETE) */}
                       {!isEditing && isMine && (
                         <div style={{ display: 'flex', gap: '4px' }}>
                           <button
@@ -765,47 +956,78 @@ export default function App() {
               <div ref={messagesEndRef} />
             </div>
 
-            {/* MESSAGE COMPOSER */}
+            {/* MESSAGE COMPOSER (Task 1: Loading guard & Auth verification) */}
             <div style={{ padding: '12px 16px', borderTop: '1px solid #334155', backgroundColor: '#1e293b' }}>
-              <form onSubmit={handleSendMessage} style={{ display: 'flex', gap: '8px' }}>
-                <input
-                  type="text"
-                  placeholder={currentUser ? `Message #${activeChannel.name}...` : 'Please sign in to send messages'}
-                  disabled={!currentUser}
-                  value={newMessageText}
-                  onChange={(e) => setNewMessageText(e.target.value)}
-                  style={{
-                    flex: 1,
-                    backgroundColor: '#0f172a',
-                    border: '1px solid #334155',
-                    color: '#f8fafc',
-                    padding: '8px 12px',
-                    borderRadius: '6px',
-                    fontSize: '13px',
-                    outline: 'none'
-                  }}
-                />
-                <button
-                  type="submit"
-                  disabled={!currentUser}
-                  style={{
-                    padding: '8px 16px',
-                    backgroundColor: '#6366f1',
-                    color: '#fff',
-                    border: 'none',
-                    borderRadius: '6px',
-                    fontSize: '13px',
-                    fontWeight: 700,
-                    cursor: currentUser ? 'pointer' : 'not-allowed',
-                    opacity: currentUser ? 1 : 0.6
-                  }}
-                >Send</button>
-              </form>
+              {!authChecked ? (
+                <div style={{ height: '38px', display: 'flex', alignItems: 'center', color: '#64748b', fontSize: '12px' }}>
+                  Connecting to Rosetta session...
+                </div>
+              ) : currentUser ? (
+                <form onSubmit={handleSendMessage} style={{ display: 'flex', gap: '8px' }}>
+                  <input
+                    type="text"
+                    placeholder={`Message #${activeChannel.name}...`}
+                    value={newMessageText}
+                    onChange={(e) => setNewMessageText(e.target.value)}
+                    style={{
+                      flex: 1,
+                      backgroundColor: '#0f172a',
+                      border: '1px solid #334155',
+                      color: '#f8fafc',
+                      padding: '8px 12px',
+                      borderRadius: '6px',
+                      fontSize: '13px',
+                      outline: 'none'
+                    }}
+                  />
+                  <button
+                    type="submit"
+                    style={{
+                      padding: '8px 16px',
+                      backgroundColor: '#6366f1',
+                      color: '#fff',
+                      border: 'none',
+                      borderRadius: '6px',
+                      fontSize: '13px',
+                      fontWeight: 700,
+                      cursor: 'pointer'
+                    }}
+                  >Send</button>
+                </form>
+              ) : (
+                <div style={{
+                  height: '38px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '0 12px',
+                  backgroundColor: '#0f172a',
+                  borderRadius: '6px',
+                  border: '1px solid #334155'
+                }}>
+                  <span style={{ fontSize: '12px', color: '#94a3b8' }}>Please sign in to send messages</span>
+                  <button
+                    onClick={() => { setShowAuthModal(true); setAuthTab('login'); }}
+                    style={{
+                      padding: '4px 10px',
+                      backgroundColor: '#6366f1',
+                      color: '#fff',
+                      border: 'none',
+                      borderRadius: '4px',
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Sign In
+                  </button>
+                </div>
+              )}
             </div>
           </section>
         )}
 
-        {/* 3. BOARD PANE (WITH CUSTOM BOARD / COLUMN NAMES) */}
+        {/* 3. BOARD PANE (WITH CUSTOM BOARD / COLUMN NAMES & WIP LIMITS) */}
         {(layoutMode === 'split' || layoutMode === 'board') && (
           <section style={{
             flex: layoutMode === 'split' ? '1 1 50%' : '1 1 100%',
@@ -815,16 +1037,8 @@ export default function App() {
             minWidth: '340px',
             overflow: 'hidden'
           }}>
-            {/* BOARD HEADER & EDITABLE TITLE */}
-            <div style={{
-              height: '46px',
-              borderBottom: '1px solid #334155',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '0 16px',
-              backgroundColor: '#1e293b'
-            }}>
+            {/* BOARD HEADER (Task 8: Standard 56px height) */}
+            <div className="pane-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 {editingBoardTitle ? (
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -856,7 +1070,7 @@ export default function App() {
                     backgroundColor: '#0f172a',
                     color: '#f8fafc',
                     border: '1px solid #334155',
-                    padding: '3px 8px',
+                    padding: '4px 8px',
                     borderRadius: '4px',
                     fontSize: '11px',
                     outline: 'none'
@@ -873,7 +1087,7 @@ export default function App() {
               <button
                 onClick={() => setShowCardModal(true)}
                 style={{
-                  padding: '5px 12px',
+                  padding: '6px 12px',
                   backgroundColor: '#0284c7',
                   color: '#fff',
                   border: 'none',
@@ -887,11 +1101,11 @@ export default function App() {
               </button>
             </div>
 
-            {/* KANBAN BOARD COLUMNS */}
+            {/* KANBAN BOARD COLUMNS (Task 5: Empty states, Task 7: WIP limits) */}
             <div style={{
               flex: 1,
               display: 'grid',
-              gridTemplateColumns: `repeat(${boardConfig.columns.length}, 1fr)`,
+              gridTemplateColumns: `repeat(${boardConfig.columns.length}, minmax(180px, 1fr))`,
               gap: '12px',
               padding: '14px',
               overflowX: 'auto'
@@ -900,17 +1114,21 @@ export default function App() {
                 const colCards = filteredCards.filter(c => c.list === col.id);
                 const isEditingCol = editingColumnId === col.id;
 
+                // Task 7: WIP Limit calculation & warning style
+                const hasLimit = col.limit != null && col.limit > 0;
+                const isOverLimit = hasLimit && colCards.length >= col.limit;
+
                 return (
                   <div key={col.id} style={{
                     backgroundColor: '#1e293b',
                     borderRadius: '8px',
-                    border: '1px solid #334155',
+                    border: isOverLimit ? '1px solid #ef4444' : '1px solid #334155',
                     display: 'flex',
                     flexDirection: 'column',
                     maxHeight: '100%',
                     overflow: 'hidden'
                   }}>
-                    {/* EDITABLE COLUMN HEADER */}
+                    {/* EDITABLE COLUMN HEADER WITH WIP LIMIT */}
                     <div style={{
                       padding: '10px 12px',
                       borderBottom: '1px solid #334155',
@@ -944,76 +1162,112 @@ export default function App() {
                       )}
                       
                       {!isEditingCol && (
-                        <span style={{ backgroundColor: '#0f172a', padding: '1px 6px', borderRadius: '8px', fontSize: '10px', color: '#94a3b8' }}>
-                          {colCards.length}
+                        <span style={{
+                          backgroundColor: isOverLimit ? '#ef4444' : '#0f172a',
+                          color: isOverLimit ? '#ffffff' : '#94a3b8',
+                          padding: '2px 7px',
+                          borderRadius: '8px',
+                          fontSize: '10px',
+                          fontWeight: 700,
+                          border: isOverLimit ? '1px solid #f87171' : '1px solid #334155'
+                        }}>
+                          {hasLimit ? `${colCards.length} / ${col.limit}` : colCards.length}
                         </span>
                       )}
                     </div>
 
-                    {/* CARD LIST */}
+                    {/* CARD LIST (Task 5: Empty Column Placeholder & Task 6: Click to Expand) */}
                     <div style={{ flex: 1, overflowY: 'auto', padding: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                      {colCards.map(card => {
-                        const pStyle = getPriorityStyle(card.priority);
-                        return (
-                          <div key={card.id} style={{
-                            backgroundColor: '#0f172a',
-                            border: '1px solid #334155',
-                            borderRadius: '6px',
-                            padding: '10px',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: '6px'
-                          }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                              <span style={{
-                                fontSize: '9px',
-                                textTransform: 'uppercase',
-                                fontWeight: 800,
-                                padding: '2px 6px',
-                                borderRadius: '4px',
-                                backgroundColor: pStyle.bg,
-                                color: pStyle.text
+                      {colCards.length === 0 ? (
+                        <div className="empty-column-placeholder">
+                          Drop a card here
+                        </div>
+                      ) : (
+                        colCards.map(card => {
+                          const pStyle = getPriorityStyle(card.priority);
+                          return (
+                            <div
+                              key={card.id}
+                              onClick={() => setExpandedCardId(card.id)}
+                              style={{
+                                backgroundColor: '#0f172a',
+                                border: '1px solid #334155',
+                                borderRadius: '6px',
+                                padding: '10px',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '6px',
+                                cursor: 'pointer',
+                                transition: 'transform 0.1s ease, border-color 0.15s ease'
+                              }}
+                              onMouseEnter={(e) => e.currentTarget.style.borderColor = '#6366f1'}
+                              onMouseLeave={(e) => e.currentTarget.style.borderColor = '#334155'}
+                            >
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span style={{
+                                  fontSize: '9px',
+                                  textTransform: 'uppercase',
+                                  fontWeight: 800,
+                                  padding: '2px 6px',
+                                  borderRadius: '4px',
+                                  backgroundColor: pStyle.bg,
+                                  color: pStyle.text
+                                }}>
+                                  {card.priority}
+                                </span>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeleteCard(card.id);
+                                  }}
+                                  title="Delete card"
+                                  style={{ background: 'transparent', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '11px' }}
+                                >✕</button>
+                              </div>
+
+                              <div style={{ fontSize: '13px', fontWeight: 700, color: '#f8fafc', lineHeight: 1.3 }}>{card.title}</div>
+                              {card.description && (
+                                <div style={{ fontSize: '11px', color: '#94a3b8', lineHeight: 1.3, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                                  {card.description}
+                                </div>
+                              )}
+
+                              <div style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                paddingTop: '6px',
+                                borderTop: '1px solid #1e293b',
+                                fontSize: '11px'
                               }}>
-                                {card.priority}
-                              </span>
-                              <button
-                                onClick={() => handleDeleteCard(card.id)}
-                                style={{ background: 'transparent', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '11px' }}
-                              >✕</button>
-                            </div>
-
-                            <div style={{ fontSize: '13px', fontWeight: 700, color: '#f8fafc', lineHeight: 1.3 }}>{card.title}</div>
-                            {card.description && (
-                              <div style={{ fontSize: '11px', color: '#94a3b8', lineHeight: 1.3 }}>{card.description}</div>
-                            )}
-
-                            <div style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'space-between',
-                              paddingTop: '6px',
-                              borderTop: '1px solid #1e293b',
-                              fontSize: '11px'
-                            }}>
-                              <span style={{ color: '#64748b' }}>👤 {card.assigneeName || 'Unassigned'}</span>
-                              <div style={{ display: 'flex', gap: '3px' }}>
-                                {col.id !== boardConfig.columns[0]?.id && (
-                                  <button
-                                    onClick={() => handleMoveCard(card.id, card.list, 'left')}
-                                    style={{ padding: '2px 6px', backgroundColor: '#334155', color: '#f8fafc', border: 'none', borderRadius: '3px', cursor: 'pointer', fontSize: '10px' }}
-                                  >◀</button>
-                                )}
-                                {col.id !== boardConfig.columns[boardConfig.columns.length - 1]?.id && (
-                                  <button
-                                    onClick={() => handleMoveCard(card.id, card.list, 'right')}
-                                    style={{ padding: '2px 6px', backgroundColor: '#334155', color: '#f8fafc', border: 'none', borderRadius: '3px', cursor: 'pointer', fontSize: '10px' }}
-                                  >▶</button>
-                                )}
+                                <span style={{ color: '#64748b' }}>👤 {card.assigneeName || 'Unassigned'}</span>
+                                <div style={{ display: 'flex', gap: '3px' }}>
+                                  {col.id !== boardConfig.columns[0]?.id && (
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleMoveCard(card.id, card.list, 'left');
+                                      }}
+                                      title="Move Left"
+                                      style={{ padding: '2px 6px', backgroundColor: '#334155', color: '#f8fafc', border: 'none', borderRadius: '3px', cursor: 'pointer', fontSize: '10px' }}
+                                    >◀</button>
+                                  )}
+                                  {col.id !== boardConfig.columns[boardConfig.columns.length - 1]?.id && (
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleMoveCard(card.id, card.list, 'right');
+                                      }}
+                                      title="Move Right"
+                                      style={{ padding: '2px 6px', backgroundColor: '#334155', color: '#f8fafc', border: 'none', borderRadius: '3px', cursor: 'pointer', fontSize: '10px' }}
+                                    >▶</button>
+                                  )}
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        );
-                      })}
+                          );
+                        })
+                      )}
                     </div>
                   </div>
                 );
@@ -1023,6 +1277,104 @@ export default function App() {
         )}
 
       </div>
+
+      {/* ============================================================ */}
+      {/* TASK 6: CARD DETAIL MODAL (CLICK TO EXPAND & FULL EDIT) */}
+      {/* ============================================================ */}
+      {expandedCardId && (
+        <div style={{
+          position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 110
+        }}>
+          <div style={{ backgroundColor: '#1e293b', borderRadius: '12px', width: '520px', padding: '24px', border: '1px solid #334155', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #334155', paddingBottom: '12px' }}>
+              <span style={{ fontSize: '14px', fontWeight: 800, color: '#94a3b8' }}>📋 Card Details</span>
+              <button onClick={() => setExpandedCardId(null)} style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '16px' }}>✕</button>
+            </div>
+
+            <form onSubmit={handleSaveCardDetail} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div>
+                <label style={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', display: 'block', marginBottom: '4px' }}>CARD TITLE</label>
+                <input
+                  type="text"
+                  required
+                  value={detailTitle}
+                  onChange={(e) => setDetailTitle(e.target.value)}
+                  style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', backgroundColor: '#0f172a', border: '1px solid #334155', color: '#f8fafc', fontSize: '13px' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', display: 'block', marginBottom: '4px' }}>FULL DESCRIPTION</label>
+                <textarea
+                  rows={5}
+                  value={detailDesc}
+                  onChange={(e) => setDetailDesc(e.target.value)}
+                  placeholder="Add detailed task notes, criteria, or comments..."
+                  style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', backgroundColor: '#0f172a', border: '1px solid #334155', color: '#f8fafc', fontSize: '13px', resize: 'vertical' }}
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', display: 'block', marginBottom: '4px' }}>COLUMN / STATUS</label>
+                  <select
+                    value={detailList}
+                    onChange={(e) => setDetailList(e.target.value)}
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', backgroundColor: '#0f172a', border: '1px solid #334155', color: '#f8fafc', fontSize: '13px' }}
+                  >
+                    {boardConfig.columns.map(c => (
+                      <option key={c.id} value={c.id}>{c.title}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', display: 'block', marginBottom: '4px' }}>PRIORITY</label>
+                  <select
+                    value={detailPriority}
+                    onChange={(e) => setDetailPriority(e.target.value)}
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', backgroundColor: '#0f172a', border: '1px solid #334155', color: '#f8fafc', fontSize: '13px' }}
+                  >
+                    <option value="urgent">🔴 Urgent</option>
+                    <option value="high">🟡 High</option>
+                    <option value="medium">🔵 Medium</option>
+                    <option value="low">🟢 Low</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', display: 'block', marginBottom: '4px' }}>ASSIGNEE</label>
+                <select
+                  value={detailAssignee}
+                  onChange={(e) => setDetailAssignee(e.target.value)}
+                  style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', backgroundColor: '#0f172a', border: '1px solid #334155', color: '#f8fafc', fontSize: '13px' }}
+                >
+                  <option value="">Unassigned</option>
+                  {allUsers.map(u => (
+                    <option key={u.id} value={u.id}>{u.name} ({u.email || `@${u.username}`})</option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => handleDeleteCard(expandedCardId)}
+                  style={{ padding: '8px 12px', backgroundColor: 'rgba(239, 68, 68, 0.2)', color: '#fca5a5', border: '1px solid #ef4444', borderRadius: '6px', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}
+                >
+                  Delete Card
+                </button>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button type="button" onClick={() => setExpandedCardId(null)} style={{ padding: '8px 14px', background: 'transparent', color: '#94a3b8', border: 'none', cursor: 'pointer' }}>Cancel</button>
+                  <button type="submit" style={{ padding: '8px 18px', backgroundColor: '#6366f1', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 700, cursor: 'pointer' }}>Save Changes</button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* ============================================================ */}
       {/* AUTH MODAL (WITH EMAIL INPUT) */}
